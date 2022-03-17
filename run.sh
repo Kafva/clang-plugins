@@ -6,7 +6,6 @@ usage="usage: $(basename $0) <file.c>"
 [[  -z "$PLUGIN" || -z "$INCLUDE_DIR" || -z "$TARGET_DIR" || -z "$REPLACE_FILE" ]] && 
   die "Missing environment variable(s)"
 
-
 # https://clang.llvm.org/docs/FAQ.html#id2
 # The -cc1 flag is used to invoke the clang 'frontend', using only the frontend
 # infers that default options are lost, errors like 
