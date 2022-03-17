@@ -6,6 +6,7 @@ set(CLANG_TUTOR_PLUGINS
     Obfuscator
     UnusedForLoopVar
     CodeRefactor
+    AddSuffix
     )
 
 set(LACommenter_SOURCES
@@ -22,6 +23,9 @@ set(UnusedForLoopVar_SOURCES
 
 set(CodeRefactor_SOURCES
   CodeRefactor.cpp)
+
+set(AddSuffix_SOURCES
+  AddSuffix.cpp)
 
 # CONFIGURE THE PLUGIN LIBRARIES
 # ==============================

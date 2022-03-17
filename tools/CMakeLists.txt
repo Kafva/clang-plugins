@@ -4,6 +4,7 @@ set(CLANG_TUTOR_TOOLS
     ct-la-commenter
     ct-code-refactor
     ct-code-style-checker
+    ct-add-suffix
 )
 
 set(ct-la-commenter_SOURCES
@@ -19,6 +20,11 @@ set(ct-code-refactor_SOURCES
 set(ct-code-style-checker_SOURCES
   CodeStyleCheckerMain.cpp
   ../lib/CodeStyleChecker.cpp
+)
+
+set(ct-add-suffix_SOURCES
+  AddSuffixMain.cpp
+  ../lib/AddSuffix.cpp
 )
 
 # CONFIGURE THE TOOLS
