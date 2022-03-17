@@ -22,6 +22,17 @@ public:
   void run(const clang::ast_matchers::MatchFinder::MatchResult &) override;
 
 private:
+  void replaceInDeclRefMatch(
+    const clang::ast_matchers::MatchFinder::MatchResult &result, 
+    std::string bindName);
+  void replaceInCallMatch(
+      const clang::ast_matchers::MatchFinder::MatchResult &result, 
+      std::string bindName);
+
+  void replaceInDeclMatch(
+    const clang::ast_matchers::MatchFinder::MatchResult &result, 
+    std::string bindName);
+
   clang::Rewriter AddSuffixRewriter;
   // NOTE: This matcher already knows *what* name to search for 
   // because it _matched_ an expression that corresponds to

@@ -30,24 +30,60 @@ using namespace ast_matchers;
 
 //-----------------------------------------------------------------------------
 // AddSuffixMatcher - implementation
+// Add the suffix to matched items
 //-----------------------------------------------------------------------------
-void AddSuffixMatcher::run(const MatchFinder::MatchResult &Result) {
-  const MemberExpr *MemberAccess =
-      Result.Nodes.getNodeAs<clang::MemberExpr>("MemberAccess");
 
-  if (MemberAccess) {
-    SourceRange CallExprSrcRange = MemberAccess->getMemberLoc();
-    AddSuffixRewriter.ReplaceText(CallExprSrcRange, Suffix);
-  }
+void AddSuffixMatcher::replaceInDeclRefMatch(
+    const MatchFinder::MatchResult &result, 
+    std::string bindName) {
 
-  const NamedDecl *MemberDecl =
-      Result.Nodes.getNodeAs<clang::NamedDecl>("MemberDecl");
+    const DeclRefExpr *node = result.Nodes
+      .getNodeAs<clang::DeclRefExpr>(bindName);
 
-  if (MemberDecl) {
-    SourceRange MemberDeclSrcRange = MemberDecl->getLocation();
-    AddSuffixRewriter.ReplaceText(
-        CharSourceRange::getTokenRange(MemberDeclSrcRange), Suffix);
-  }
+    if (node) {
+      SourceRange srcRange = node->getExprLoc();
+      auto newName = node->getDecl()->getName().str() + this->Suffix;
+
+      this->AddSuffixRewriter.ReplaceText(srcRange, newName);
+    }
+}
+
+void AddSuffixMatcher::replaceInCallMatch(
+    const MatchFinder::MatchResult &result, 
+    std::string bindName) {
+
+    const CallExpr *node = result.Nodes.getNodeAs<clang::CallExpr>(bindName);
+
+    if (node) {
+      SourceRange srcRange = node->getExprLoc();
+      auto newName = node->getDirectCallee()->getName().str() + this->Suffix;
+
+      this->AddSuffixRewriter.ReplaceText(srcRange, newName);
+    }
+}
+
+void AddSuffixMatcher::replaceInDeclMatch(
+  const MatchFinder::MatchResult &result, 
+  std::string bindName) {
+
+    const DeclaratorDecl *node = result.Nodes
+      .getNodeAs<clang::DeclaratorDecl>(bindName);
+
+    if (node) {
+      // .getLocation() applies for Decl:: classes
+      SourceRange srcRange = node->getLocation();
+      std::string newName = node->getName().str() + this->Suffix;
+
+      this->AddSuffixRewriter.ReplaceText(srcRange, newName);
+    }
+}
+
+void AddSuffixMatcher::run(const MatchFinder::MatchResult &result) {
+
+  this->replaceInDeclMatch(result, "FunctionDecl");
+  this->replaceInDeclMatch(result, "VarDecl");
+  this->replaceInDeclRefMatch(result, "DeclRefExpr");
+  this->replaceInCallMatch(result, "CallExpr");
 }
 
 void AddSuffixMatcher::onEndOfTranslationUnit() {
@@ -59,21 +95,36 @@ void AddSuffixMatcher::onEndOfTranslationUnit() {
 
 //-----------------------------------------------------------------------------
 // AddSuffixASTConsumer- implementation
+// https://clang.llvm.org/docs/LibASTMatchersTutorial.html
+// Specifies the node patterns that we want to analyze further in ::run()
 //-----------------------------------------------------------------------------
-AddSuffixASTConsumer::AddSuffixASTConsumer(Rewriter &R, std::string Name, std::string Suffix)
+AddSuffixASTConsumer::AddSuffixASTConsumer(
+    Rewriter &R, std::string Name, std::string Suffix)
     : AddSuffixHandler(R, Suffix), Name(Name), Suffix(Suffix) {
+  
 
-  const auto MatcherForMemberAccess = cxxMemberCallExpr(
-      callee(memberExpr(member(hasName(Name))).bind("MemberAccess")),
-      thisPointerType(cxxRecordDecl(isSameOrDerivedFrom(hasName(Name)))));
+  // Match any: 
+  //  - Function declerations
+  //  - Function calls
+  //  - Variable declerations
+  //  - References to variable declerations
+  //  that have the provided name
+  const auto matcherForFunctionDecl = functionDecl(hasName(Name))
+	  				.bind("FunctionDecl");
+  const auto matcherForFunctionCall = callExpr(callee(
+	                                functionDecl(hasName(Name))))
+				        .bind("CallExpr");
 
-  Finder.addMatcher(MatcherForMemberAccess, &AddSuffixHandler);
+  const auto matcherForVarDecl = varDecl(hasName(Name))
+	  				.bind("VarDecl");
+  const auto matcherForDeclRefExpr = declRefExpr(to(varDecl(hasName(Name))))
+	  				.bind("DeclRefExpr");
 
-  const auto MatcherForMemberDecl = cxxRecordDecl(
-      allOf(isSameOrDerivedFrom(hasName("None")),
-            hasMethod(decl(namedDecl(hasName(Name))).bind("MemberDecl"))));
 
-  Finder.addMatcher(MatcherForMemberDecl, &AddSuffixHandler);
+  Finder.addMatcher(matcherForFunctionDecl, &AddSuffixHandler);
+  Finder.addMatcher(matcherForVarDecl,      &AddSuffixHandler);
+  Finder.addMatcher(matcherForFunctionCall, &AddSuffixHandler);
+  Finder.addMatcher(matcherForDeclRefExpr,  &AddSuffixHandler);
 }
 
 //-----------------------------------------------------------------------------
@@ -82,49 +133,41 @@ AddSuffixASTConsumer::AddSuffixASTConsumer(Rewriter &R, std::string Name, std::s
 class AddSuffixAddPluginAction : public PluginASTAction {
 public:
   bool ParseArgs(const CompilerInstance &CI,
-                 const std::vector<std::string> &Args) override {
-    // Example error handling.
-    DiagnosticsEngine &D = CI.getDiagnostics();
-    for (size_t I = 0, E = Args.size(); I != E; ++I) {
-      llvm::errs() << "AddSuffix arg = " << Args[I] << "\n";
+                 const std::vector<std::string> &args) override {
 
-      if (Args[I] == "-name") {
-        if (I + 1 >= E) {
-          D.Report(D.getCustomDiagID(DiagnosticsEngine::Error,
-                                     "missing -name argument"));
-          return false;
-        }
-        ++I;
-        Name = Args[I];
-      } else if (Args[I] == "-suffix") {
-        if (I + 1 >= E) {
-          D.Report(D.getCustomDiagID(DiagnosticsEngine::Error,
-                                     "missing -suffix"));
-          return false;
-        }
-        ++I;
-        Suffix = Args[I];
+    DiagnosticsEngine &diagnostics = CI.getDiagnostics();
+    
+    unsigned namesDiagID = diagnostics.getCustomDiagID(
+	DiagnosticsEngine::Error, "missing -names-file"
+    );
+    unsigned suffixDiagID = diagnostics.getCustomDiagID(
+	DiagnosticsEngine::Error, "missing -suffix"
+    );
+
+    for (size_t i = 0, size = args.size(); i != size; ++i) {
+      llvm::errs() << "AddSuffix arg = " << args[i] << "\n";
+
+      if (args[i] == "-names-file") {
+          if (parseArg(diagnostics, namesDiagID, size, args, i)){
+                this->Name = args[++i];
+	  } else {
+                return false;
+	  }
       }
-      if (!Args.empty() && Args[0] == "help")
-        PrintHelp(llvm::errs());
-    }
+      else if (args[i] == "-suffix") {
+          if (parseArg(diagnostics, suffixDiagID, size, args, i)){
+                this->Suffix = args[++i];
+	  } else {
+                return false;
+	  }
+      }
 
-
-    if (Suffix.empty()) {
-      D.Report(D.getCustomDiagID(DiagnosticsEngine::Error,
-                                 "missing -suffix argument"));
-      return false;
-    }
-    if (Name.empty()) {
-      D.Report(D.getCustomDiagID(DiagnosticsEngine::Error,
-                                 "missing -name argument"));
-      return false;
+      if (!args.empty() && args[0] == "help") {
+	llvm::errs() << "No help available";
+      }
     }
 
     return true;
-  }
-  static void PrintHelp(llvm::raw_ostream &ros) {
-    ros << "Help for AddSuffix plugin goes here\n";
   }
 
   // Returns our ASTConsumer per translation unit.
@@ -138,6 +181,21 @@ public:
   }
 
 private:
+  bool parseArg(DiagnosticsEngine &diagnostics, unsigned diagID, int size, 
+		  const std::vector<std::string> &args, int i) {
+        
+        if (i + 1 >= size) {
+          diagnostics.Report(diagID);
+          return false;
+        }
+	if (args[i+1].empty()) {
+	  diagnostics.Report(diagID);
+	  return false;
+	}
+
+	return true;
+  }
+
   Rewriter RewriterForAddSuffix;
   std::string Name;
   std::string Suffix;

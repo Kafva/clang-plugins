@@ -3,7 +3,7 @@ die(){ echo -e "$1" >&2 ; exit 1; }
 usage="usage: $(basename $0) <file.c>"
 [ -z "$1" ] && die "$usage"
 
-[[  -z "$PLUGIN" || -z "$INCLUDE_DIR" || -z "$TARGET_DIR"  ]] && 
+[[  -z "$PLUGIN" || -z "$INCLUDE_DIR" || -z "$TARGET_DIR" || -z "$REPLACE_FILE" ]] && 
   die "Missing environment variable(s)"
 
 
@@ -38,8 +38,8 @@ EOF
 cd $TARGET_DIR
 clang -cc1 -load "$PLUGIN" \
 	-plugin AddSuffix \
-	-plugin-arg-AddSuffix -name -plugin-arg-AddSuffix matrix_init  \
-	-plugin-arg-AddSuffix -suffix -plugin-arg-AddSuffix _old \
+	-plugin-arg-AddSuffix -names-file -plugin-arg-AddSuffix $REPLACE_FILE  \
+	-plugin-arg-AddSuffix -suffix -plugin-arg-AddSuffix _old_aaaaaaa \
 	$(cat $isystem_flags) \
 	$TARGET_FILE -I $INCLUDE_DIR -I/usr/include
 
