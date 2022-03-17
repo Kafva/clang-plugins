@@ -24,6 +24,7 @@
 #include "clang/Tooling/Refactoring/Rename/RenamingAction.h"
 #include "llvm/Support/raw_ostream.h"
 #include <string>
+#include <fstream>
 
 using namespace clang;
 using namespace ast_matchers;
@@ -79,7 +80,6 @@ void AddSuffixMatcher::replaceInDeclMatch(
 }
 
 void AddSuffixMatcher::run(const MatchFinder::MatchResult &result) {
-
   this->replaceInDeclMatch(result, "FunctionDecl");
   this->replaceInDeclMatch(result, "VarDecl");
   this->replaceInDeclRefMatch(result, "DeclRefExpr");
@@ -98,26 +98,63 @@ void AddSuffixMatcher::onEndOfTranslationUnit() {
 // https://clang.llvm.org/docs/LibASTMatchersTutorial.html
 // Specifies the node patterns that we want to analyze further in ::run()
 //-----------------------------------------------------------------------------
+
+
+
 AddSuffixASTConsumer::AddSuffixASTConsumer(
-    Rewriter &R, std::string Name, std::string Suffix)
-    : AddSuffixHandler(R, Suffix), Name(Name), Suffix(Suffix) {
+    Rewriter &R, std::vector<std::string> Names, std::string Suffix)
+    : AddSuffixHandler(R, Suffix), Names(Names), Suffix(Suffix) {
   
+
+  //std::array<internal::Matcher<NamedDecl>,100> nameMatcher{};
+  //internal::Matcher<NamedDecl> nameMatcher[100];
+
+  std::vector<internal::Matcher<NamedDecl>> nameMatcher;
+  for (auto name : Names){
+    nameMatcher.push_back(hasName(name));
+  }
+
+  // The matcher needs to know the number of arguments
+  // it recieves at compile time so we haft to rely
+  // on a handful of hacky macros to define expressions
+  // were we match agianst 1, 10, 100 or 1000 different names
+  // if there are more than a thousand names we will iterate, using the
+  // most appropriate version, binding() to new names
+  //
+  // Or... Create 4 * 10 000 seperate matchers, that must have very bad performance...
 
   // Match any: 
   //  - Function declerations
   //  - Function calls
   //  - Variable declerations
   //  - References to variable declerations
-  //  that have the provided name
-  const auto matcherForFunctionDecl = functionDecl(hasName(Name))
+  //  that have 'anyOf' the provided names
+  const auto matcherForFunctionDecl = functionDecl(
+				      anyOf( 
+					  hasName(Names[0]), 
+					  hasName(Names[1]) 
+					))
 	  				.bind("FunctionDecl");
   const auto matcherForFunctionCall = callExpr(callee(
-	                                functionDecl(hasName(Name))))
+	                                functionDecl(
+				        anyOf( 
+					  hasName(Names[0]), 
+					  hasName(Names[1])
+					))))
 				        .bind("CallExpr");
 
-  const auto matcherForVarDecl = varDecl(hasName(Name))
+  const auto matcherForVarDecl = varDecl(
+				      anyOf( 
+					  hasName(Names[0]), 
+					  hasName(Names[1]) 
+					))
 	  				.bind("VarDecl");
-  const auto matcherForDeclRefExpr = declRefExpr(to(varDecl(hasName(Name))))
+
+  const auto matcherForDeclRefExpr = declRefExpr(to(varDecl(
+				        anyOf( 
+					  hasName(Names[0]), 
+					  hasName(Names[1]) 
+					))))
 	  				.bind("DeclRefExpr");
 
 
@@ -149,7 +186,8 @@ public:
 
       if (args[i] == "-names-file") {
           if (parseArg(diagnostics, namesDiagID, size, args, i)){
-                this->Name = args[++i];
+                auto NamesFile = args[++i];
+		this->readNamesFromFile(NamesFile);
 	  } else {
                 return false;
 	  }
@@ -170,6 +208,7 @@ public:
     return true;
   }
 
+
   // Returns our ASTConsumer per translation unit.
   std::unique_ptr<ASTConsumer> 
     CreateASTConsumer(CompilerInstance &CI, StringRef file) override {
@@ -177,10 +216,24 @@ public:
     RewriterForAddSuffix.setSourceMgr(CI.getSourceManager(),
 				      CI.getLangOpts());
     return std::make_unique<AddSuffixASTConsumer>(
-	RewriterForAddSuffix, Name, Suffix);
+	RewriterForAddSuffix, this->Names, this->Suffix);
   }
 
 private:
+  void readNamesFromFile(std::string filename) {
+    std::ifstream file(filename);
+
+    if (file.is_open()) {
+      std::string line;
+
+      while (std::getline(file,line)) {
+	this->Names.push_back(line);
+      }
+
+      file.close();
+    }
+  }
+
   bool parseArg(DiagnosticsEngine &diagnostics, unsigned diagID, int size, 
 		  const std::vector<std::string> &args, int i) {
         
@@ -197,7 +250,7 @@ private:
   }
 
   Rewriter RewriterForAddSuffix;
-  std::string Name;
+  std::vector<std::string> Names;
   std::string Suffix;
 };
 
@@ -205,5 +258,5 @@ private:
 // Registration
 //-----------------------------------------------------------------------------
 static FrontendPluginRegistry::Add<AddSuffixAddPluginAction>
-    X(/*Name=*/"AddSuffix",
+    X(/*NamesFile=*/"AddSuffix",
       /*Desc=*/"Add a suffix to a global symbol");

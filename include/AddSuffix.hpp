@@ -46,7 +46,7 @@ private:
 class AddSuffixASTConsumer : public clang::ASTConsumer {
 public:
   AddSuffixASTConsumer(clang::Rewriter &R, 
-      std::string Name, std::string Suffix
+      std::vector<std::string> Names, std::string Suffix
   );
 
   void HandleTranslationUnit(clang::ASTContext &Ctx) override {
@@ -56,7 +56,7 @@ public:
 private:
   clang::ast_matchers::MatchFinder Finder;
   AddSuffixMatcher AddSuffixHandler;
-  std::string Name;
+  std::vector<std::string> Names;
   std::string Suffix;
 };
 

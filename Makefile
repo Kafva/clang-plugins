@@ -16,14 +16,8 @@ OUTPUT_FILES= $(OUT_LIB) $(OUT_EXEC)
 TARGET_DIR=~/Repos/oniguruma
 INPUT_FILE=$(TARGET_DIR)/src/st.c
 INCLUDE_DIR=$(TARGET_DIR)/src
-#REPLACE_FILE=bitset_on_num
-#REPLACE_FILE=onig_builtin_monitor
-#REPLACE_FILE=primes
-REPLACE_FILE=new_size
+REPLACE_FILE=/home/jonas/Repos/euf/tests/names.txt
 
-#TARGET_DIR=~/Repos/matrix
-#INPUT_FILE=$(TARGET_DIR)/src/matrix.c
-#INCLUDE_DIR=$(TARGET_DIR)/include
 
 .PHONY: clean run
 
