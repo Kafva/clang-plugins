@@ -7,33 +7,88 @@
 #include "clang/Rewrite/Frontend/FixItRewriter.h"
 #include "clang/Tooling/CommonOptionsParser.h"
 
+
+#define hasNames10(arr,start) hasName(arr[start]), hasName(arr[start+1]), \
+  hasName(arr[start+2]), hasName(arr[start+3]), hasName(arr[start+4]), \
+  hasName(arr[start+5]), hasName(arr[start+6]), hasName(arr[start+7]), \
+  hasName(arr[start+8]), hasName(arr[start+9]) 
+
+#define hasNames100(arr,start) hasNames10(arr,start), \
+  hasNames10(arr,start + 10*1), hasNames10(arr,start + 10*2), \
+  hasNames10(arr,start + 10*3), hasNames10(arr,start + 10*4), \
+  hasNames10(arr,start + 10*5), hasNames10(arr,start + 10*6), \
+  hasNames10(arr,start + 10*7), hasNames10(arr,start + 10*8), \
+  hasNames10(arr,start + 10*9) 
+
+#define hasNames200(arr,start) hasNames100(arr,start), \
+  hasNames100(arr,start + 100*1)
+
+// We cannot define this as a regular class method since the prototype for the 
+// 'hasNames' function depends on how many elements lie within the object
+//
+// Match any: 
+//  - Function declerations
+//  - Function calls
+//  - Variable declerations
+//  - References to variable declerations
+//  that have 'anyOf' the provided names
+//
+// Adding several matchers with the same .bind() string does 
+// not cause problems
+#define addMatchers(hasNames) do { \
+    const auto matcherForFunctionDecl = functionDecl(hasNames) \
+					  .bind("FunctionDecl"); \
+ \
+    const auto matcherForFunctionCall = callExpr(callee( \
+					  functionDecl(hasNames))) \
+					  .bind("CallExpr"); \
+ \
+    const auto matcherForVarDecl = varDecl(hasNames) \
+					  .bind("VarDecl"); \
+ \
+    const auto matcherForDeclRefExpr = declRefExpr(to(varDecl( \
+					  hasNames))) \
+					  .bind("DeclRefExpr"); \
+ \
+ \
+    Finder.addMatcher(matcherForFunctionDecl, &(this->AddSuffixHandler)); \
+    Finder.addMatcher(matcherForVarDecl,      &(this->AddSuffixHandler)); \
+    Finder.addMatcher(matcherForFunctionCall, &(this->AddSuffixHandler)); \
+    Finder.addMatcher(matcherForDeclRefExpr,  &(this->AddSuffixHandler)); \
+ \
+} while (0)
+
+
+using namespace clang;
+using namespace ast_matchers;
+
 //-----------------------------------------------------------------------------
 // ASTFinder callback
 //-----------------------------------------------------------------------------
 class AddSuffixMatcher
-    : public clang::ast_matchers::MatchFinder::MatchCallback {
+    : public MatchFinder::MatchCallback {
 public:
-  explicit AddSuffixMatcher(clang::Rewriter &RewriterForAddSuffix, 
+  explicit AddSuffixMatcher(Rewriter &RewriterForAddSuffix, 
       std::string Suffix)
       : AddSuffixRewriter(RewriterForAddSuffix), Suffix(Suffix) {}
 
   void onEndOfTranslationUnit() override;
 
-  void run(const clang::ast_matchers::MatchFinder::MatchResult &) override;
+  void run(const MatchFinder::MatchResult &) override;
 
 private:
   void replaceInDeclRefMatch(
-    const clang::ast_matchers::MatchFinder::MatchResult &result, 
+    const MatchFinder::MatchResult &result, 
     std::string bindName);
   void replaceInCallMatch(
-      const clang::ast_matchers::MatchFinder::MatchResult &result, 
+      const MatchFinder::MatchResult &result, 
       std::string bindName);
 
   void replaceInDeclMatch(
-    const clang::ast_matchers::MatchFinder::MatchResult &result, 
+    const MatchFinder::MatchResult &result, 
     std::string bindName);
 
-  clang::Rewriter AddSuffixRewriter;
+  Rewriter AddSuffixRewriter;
   // NOTE: This matcher already knows *what* name to search for 
   // because it _matched_ an expression that corresponds to
   // the command line arguments.
@@ -43,18 +98,24 @@ private:
 //-----------------------------------------------------------------------------
 // ASTConsumer
 //-----------------------------------------------------------------------------
-class AddSuffixASTConsumer : public clang::ASTConsumer {
+class AddSuffixASTConsumer : public ASTConsumer {
 public:
-  AddSuffixASTConsumer(clang::Rewriter &R, 
+  AddSuffixASTConsumer(Rewriter &R, 
       std::vector<std::string> Names, std::string Suffix
   );
 
-  void HandleTranslationUnit(clang::ASTContext &Ctx) override {
+  void HandleTranslationUnit(ASTContext &Ctx) override {
     Finder.matchAST(Ctx);
   }
 
 private:
-  clang::ast_matchers::MatchFinder Finder;
+  //void addMatchers(
+  //    Rewriter &R, 
+  //    internal::VariadicOperatorMatcher<internal::Matcher<NamedDecl>, internal::Matcher<NamedDecl>> hasNames
+  //);
+
+
+  MatchFinder Finder;
   AddSuffixMatcher AddSuffixHandler;
   std::vector<std::string> Names;
   std::string Suffix;

@@ -99,69 +99,49 @@ void AddSuffixMatcher::onEndOfTranslationUnit() {
 // Specifies the node patterns that we want to analyze further in ::run()
 //-----------------------------------------------------------------------------
 
-
-
 AddSuffixASTConsumer::AddSuffixASTConsumer(
     Rewriter &R, std::vector<std::string> Names, std::string Suffix)
     : AddSuffixHandler(R, Suffix), Names(Names), Suffix(Suffix) {
-  
-
-  //std::array<internal::Matcher<NamedDecl>,100> nameMatcher{};
-  //internal::Matcher<NamedDecl> nameMatcher[100];
-
-  std::vector<internal::Matcher<NamedDecl>> nameMatcher;
-  for (auto name : Names){
-    nameMatcher.push_back(hasName(name));
-  }
-
   // The matcher needs to know the number of arguments
   // it recieves at compile time so we haft to rely
   // on a handful of hacky macros to define expressions
-  // were we match agianst 1, 10, 100 or 1000 different names
-  // if there are more than a thousand names we will iterate, using the
-  // most appropriate version, binding() to new names
+  // were we match agianst 1, 10, 100 or 200 different names
   //
-  // Or... Create 4 * 10 000 seperate matchers, that must have very bad performance...
+  // We can't (and shouldn't) create to many layers of macros for this
+  //   template instantiation depth exceeds maximum of 900 (use ‘-ftemplate-depth=’ to increase the maximum)
+  // and therefore stop at 200 names
+  int namesLeft = Names.size();
+  int batchCnt;
+  
+  while (namesLeft > 0) {
+    if ( (batchCnt = namesLeft / 200) >= 1 ) { /* > 399 names left */
 
-  // Match any: 
-  //  - Function declerations
-  //  - Function calls
-  //  - Variable declerations
-  //  - References to variable declerations
-  //  that have 'anyOf' the provided names
-  const auto matcherForFunctionDecl = functionDecl(
-				      anyOf( 
-					  hasName(Names[0]), 
-					  hasName(Names[1]) 
-					))
-	  				.bind("FunctionDecl");
-  const auto matcherForFunctionCall = callExpr(callee(
-	                                functionDecl(
-				        anyOf( 
-					  hasName(Names[0]), 
-					  hasName(Names[1])
-					))))
-				        .bind("CallExpr");
+      for (int i = 0; i < batchCnt; i++) {
+	addMatchers( anyOf(hasNames200(Names,i*200)) );
+      }
 
-  const auto matcherForVarDecl = varDecl(
-				      anyOf( 
-					  hasName(Names[0]), 
-					  hasName(Names[1]) 
-					))
-	  				.bind("VarDecl");
+      namesLeft -= batchCnt*200;
+    } else if ( (batchCnt = namesLeft / 100) >= 1 ) { /* > 99 names left */
+      
+      for (int i = 0; i < batchCnt; i++) {
+	addMatchers( anyOf(hasNames100(Names,i*100)) );
+      }
 
-  const auto matcherForDeclRefExpr = declRefExpr(to(varDecl(
-				        anyOf( 
-					  hasName(Names[0]), 
-					  hasName(Names[1]) 
-					))))
-	  				.bind("DeclRefExpr");
-
-
-  Finder.addMatcher(matcherForFunctionDecl, &AddSuffixHandler);
-  Finder.addMatcher(matcherForVarDecl,      &AddSuffixHandler);
-  Finder.addMatcher(matcherForFunctionCall, &AddSuffixHandler);
-  Finder.addMatcher(matcherForDeclRefExpr,  &AddSuffixHandler);
+      namesLeft -= batchCnt*100;
+    } else if ( (batchCnt = namesLeft / 10) >= 1 ) { /* > 9 names left */
+      
+      for (int i = 0; i < batchCnt; i++) {
+	addMatchers( anyOf(hasNames10(Names,i*10)) );
+      }
+  
+      namesLeft -= batchCnt*10;
+    } else { /* 1-9 names left */
+        
+	addMatchers( hasName(Names[Names.size()-1]) );
+	namesLeft--;
+	Names.pop_back();
+    }
+  }
 }
 
 //-----------------------------------------------------------------------------

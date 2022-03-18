@@ -11,8 +11,11 @@ OUTPUT_FILES= $(OUT_LIB) $(OUT_EXEC)
 
 # Unlike `clang-rename`, this plugin only acts on one file at a time,
 # allowing us to run several instances in parallel
+#
+# NOTE: the program considers #ifdefs and does not replace things inside false #defs
+# since these elements will not be part of the parsed AST
 
-# clang -Xclang -ast-dump src/regexec.c -Isrc -I/usr/include -E
+# clang -Xclang -ast-dump src/st.c -Isrc -I/usr/include -E
 TARGET_DIR=~/Repos/oniguruma
 INPUT_FILE=$(TARGET_DIR)/src/st.c
 INCLUDE_DIR=$(TARGET_DIR)/src
