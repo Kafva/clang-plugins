@@ -110,36 +110,43 @@ AddSuffixASTConsumer::AddSuffixASTConsumer(
   // We can't (and shouldn't) create to many layers of macros for this
   //   template instantiation depth exceeds maximum of 900 (use ‘-ftemplate-depth=’ to increase the maximum)
   // and therefore stop at 200 names
-  int namesLeft = Names.size();
+  int namesLeft = (int)this->Names.size();
   int batchCnt;
   
   while (namesLeft > 0) {
-    if ( (batchCnt = namesLeft / 200) >= 1 ) { /* > 399 names left */
+    // We read the names from LAST to FIRST in the vector
+    // 'namesLeft' is used as the top value for each iteration
+   
+    if ( (batchCnt = namesLeft / 200) >= 1 ) { /* > 199 names left */
 
-      for (int i = 0; i < batchCnt; i++) {
-	addMatchers( anyOf(hasNames200(Names,i*200)) );
-      }
+      //for (int _ = 0; _ < batchCnt; _++) {
+      //  addMatchers( anyOf(hasNames200(this->Names, namesLeft)) );
+      //  namesLeft -= 200;
+      //}
 
-      namesLeft -= batchCnt*200;
     } else if ( (batchCnt = namesLeft / 100) >= 1 ) { /* > 99 names left */
       
-      for (int i = 0; i < batchCnt; i++) {
-	addMatchers( anyOf(hasNames100(Names,i*100)) );
-      }
+      //for (int _ = 0; _ < batchCnt; _++) {
+      //  addMatchers( anyOf(hasNames100(this->Names, namesLeft)) );
+      //  namesLeft -= 100;
+      //}
 
-      namesLeft -= batchCnt*100;
     } else if ( (batchCnt = namesLeft / 10) >= 1 ) { /* > 9 names left */
       
-      for (int i = 0; i < batchCnt; i++) {
-	addMatchers( anyOf(hasNames10(Names,i*10)) );
+      for (int _ = 0; _ < batchCnt; _++) {
+	addMatchers( anyOf(hasNames10(this->Names, namesLeft)) );
+	namesLeft -= 10;
       }
-  
-      namesLeft -= batchCnt*10;
+
     } else { /* 1-9 names left */
-        
-	addMatchers( hasName(Names[Names.size()-1]) );
+      llvm::errs() << "\033[33m!>\033[0m Adding suffix onto " << 
+	Names[namesLeft - 1 ] << 
+	  " ("<<  namesLeft << " to go)\n";
+
+        // Note that we will not decrement correctly if 
+	// we do it inside of a macro
 	namesLeft--;
-	Names.pop_back();
+	addMatchers( hasName(Names[namesLeft]) );
     }
   }
 }
