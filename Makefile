@@ -19,7 +19,10 @@ OUTPUT_FILES= $(OUT_LIB) $(OUT_EXEC)
 TARGET_DIR=~/Repos/oniguruma
 INPUT_FILE=$(TARGET_DIR)/src/st.c
 INCLUDE_DIR=$(TARGET_DIR)/src
-REPLACE_FILE=/home/jonas/Repos/euf/tests/names.txt
+
+
+# 'rehash' is used in macro
+REPLACE_FILE=/home/jonas/Repos/euf/clang-suffix/test/onig_tests.txt
 
 
 .PHONY: clean run

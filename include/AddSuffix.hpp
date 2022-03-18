@@ -28,10 +28,10 @@
 //
 // Match any: 
 //  - Function declerations
-//  - Function calls
+//  - Function references (this includes function calls())
 //  - Variable declerations
-//  - References to variable declerations
-//  that have 'anyOf' the provided names
+//  - Variable references
+//  that have 'anyOf' the provided (global) names
 //
 // Adding several matchers with the same .bind() string does 
 // not cause problems
@@ -39,22 +39,17 @@
     const auto matcherForFunctionDecl = functionDecl(hasNames) \
 					  .bind("FunctionDecl"); \
  \
-    const auto matcherForFunctionCall = callExpr(callee( \
-					  functionDecl(hasNames))) \
-					  .bind("CallExpr"); \
- \
     const auto matcherForVarDecl = varDecl(hasNames) \
 					  .bind("VarDecl"); \
  \
-    const auto matcherForDeclRefExpr = declRefExpr(to(varDecl( \
+    const auto matcherForRefExpr = declRefExpr(to(declaratorDecl( \
 					  hasNames))) \
 					  .bind("DeclRefExpr"); \
  \
  \
     Finder.addMatcher(matcherForFunctionDecl, &(this->AddSuffixHandler)); \
     Finder.addMatcher(matcherForVarDecl,      &(this->AddSuffixHandler)); \
-    Finder.addMatcher(matcherForFunctionCall, &(this->AddSuffixHandler)); \
-    Finder.addMatcher(matcherForDeclRefExpr,  &(this->AddSuffixHandler)); \
+    Finder.addMatcher(matcherForRefExpr,      &(this->AddSuffixHandler)); \
  \
 } while (0)
 

@@ -34,41 +34,11 @@ using namespace ast_matchers;
 // Add the suffix to matched items
 //-----------------------------------------------------------------------------
 
-void AddSuffixMatcher::replaceInDeclRefMatch(
-    const MatchFinder::MatchResult &result, 
-    std::string bindName) {
-
-    const DeclRefExpr *node = result.Nodes
-      .getNodeAs<clang::DeclRefExpr>(bindName);
-
-    if (node) {
-      SourceRange srcRange = node->getExprLoc();
-      auto newName = node->getDecl()->getName().str() + this->Suffix;
-
-      this->AddSuffixRewriter.ReplaceText(srcRange, newName);
-    }
-}
-
-void AddSuffixMatcher::replaceInCallMatch(
-    const MatchFinder::MatchResult &result, 
-    std::string bindName) {
-
-    const CallExpr *node = result.Nodes.getNodeAs<clang::CallExpr>(bindName);
-
-    if (node) {
-      SourceRange srcRange = node->getExprLoc();
-      auto newName = node->getDirectCallee()->getName().str() + this->Suffix;
-
-      this->AddSuffixRewriter.ReplaceText(srcRange, newName);
-    }
-}
-
 void AddSuffixMatcher::replaceInDeclMatch(
-  const MatchFinder::MatchResult &result, 
-  std::string bindName) {
+  const MatchFinder::MatchResult &result, std::string bindName) {
 
     const DeclaratorDecl *node = result.Nodes
-      .getNodeAs<clang::DeclaratorDecl>(bindName);
+      .getNodeAs<DeclaratorDecl>(bindName);
 
     if (node) {
       // .getLocation() applies for Decl:: classes
@@ -79,11 +49,25 @@ void AddSuffixMatcher::replaceInDeclMatch(
     }
 }
 
+void AddSuffixMatcher::replaceInDeclRefMatch(
+    const MatchFinder::MatchResult &result, std::string bindName) {
+
+    const DeclRefExpr *node = result.Nodes
+      .getNodeAs<DeclRefExpr>(bindName);
+
+    if (node) {
+      SourceRange srcRange = node->getExprLoc();
+      auto newName = node->getDecl()->getName().str() + this->Suffix;
+
+      this->AddSuffixRewriter.ReplaceText(srcRange, newName);
+    }
+}
+
 void AddSuffixMatcher::run(const MatchFinder::MatchResult &result) {
-  this->replaceInDeclMatch(result, "FunctionDecl");
-  this->replaceInDeclMatch(result, "VarDecl");
+  this->replaceInDeclMatch(result,    "FunctionDecl");
+  this->replaceInDeclMatch(result,    "VarDecl");
   this->replaceInDeclRefMatch(result, "DeclRefExpr");
-  this->replaceInCallMatch(result, "CallExpr");
+  //this->replaceInDeclRefMatch(result, "VarDeclRefExpr");
 }
 
 void AddSuffixMatcher::onEndOfTranslationUnit() {

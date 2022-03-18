@@ -1,0 +1,11 @@
+new_size
+onig_builtin_monitor
+rehash
+primes
+numcmp
+st_init_table_with_size
+st_insert
+st_add_direct
+st_copy
+st_foreach
+strhash
