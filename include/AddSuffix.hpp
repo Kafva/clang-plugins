@@ -7,6 +7,7 @@
 #include "clang/Rewrite/Frontend/FixItRewriter.h"
 #include "clang/Tooling/CommonOptionsParser.h"
 
+#define DEBUG_AST false
 
 #define hasNames10(arr,end) hasName(arr[end]), hasName(arr[end-1]), \
   hasName(arr[end-2]), hasName(arr[end-3]), hasName(arr[end-4]), \

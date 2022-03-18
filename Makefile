@@ -14,14 +14,17 @@ OUTPUT_FILES= $(OUT_LIB) $(OUT_EXEC)
 #
 # NOTE: the program considers #ifdefs and does not replace things inside false #defs
 # since these elements will not be part of the parsed AST
+# 
+# NOTE: #macros are expanded before the AST processing, this means that we can't
+# replace references inside macros in the original source unless we expand
+# all macros before performing any replacements
 
 # clang -Xclang -ast-dump src/st.c -Isrc -I/usr/include -E
 TARGET_DIR=~/Repos/oniguruma
 INPUT_FILE=$(TARGET_DIR)/src/st.c
 INCLUDE_DIR=$(TARGET_DIR)/src
 
-
-# 'rehash' is used in macro
+# 'rehash' is used inside a macro
 REPLACE_FILE=/home/jonas/Repos/euf/clang-suffix/test/onig_tests.txt
 
 

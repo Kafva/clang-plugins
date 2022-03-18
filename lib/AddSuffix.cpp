@@ -41,11 +41,25 @@ void AddSuffixMatcher::replaceInDeclMatch(
       .getNodeAs<DeclaratorDecl>(bindName);
 
     if (node) {
-      // .getLocation() applies for Decl:: classes
-      SourceRange srcRange = node->getLocation();
-      std::string newName = node->getName().str() + this->Suffix;
+      std::string nodeName = node->getName().str();
 
-      this->AddSuffixRewriter.ReplaceText(srcRange, newName);
+      if (nodeName.find(this->Suffix) == std::string::npos){
+        // If the other matcher has already performed a replacement
+	// do not add a suffix agian
+	SourceRange srcRange = node->getLocation();
+	auto newName = nodeName + this->Suffix;
+
+	#if DEBUG_AST
+	llvm::errs() << "\033[33m!>\033[0m " << bindName << ": " <<
+	  nodeName << "\n";
+	#endif
+	this->AddSuffixRewriter.ReplaceText(srcRange, newName);
+      } else {
+	#if DEBUG_AST
+	llvm::errs() << "\033[31m!>\033[0m " << bindName << ": " <<
+	  nodeName << "\n";
+	#endif
+      }
     }
 }
 
@@ -56,10 +70,25 @@ void AddSuffixMatcher::replaceInDeclRefMatch(
       .getNodeAs<DeclRefExpr>(bindName);
 
     if (node) {
-      SourceRange srcRange = node->getExprLoc();
-      auto newName = node->getDecl()->getName().str() + this->Suffix;
+      auto nodeName = node->getDecl()->getName().str();
 
-      this->AddSuffixRewriter.ReplaceText(srcRange, newName);
+      if (nodeName.find(this->Suffix) == std::string::npos){
+        // If the other matcher has already performed a replacement
+	// do not add a suffix agian
+	SourceRange srcRange = node->getExprLoc();
+	auto newName = nodeName + this->Suffix;
+
+	#if DEBUG_AST
+	llvm::errs() << "\033[33m!>\033[0m " << bindName << ": " <<
+	  nodeName << "\n";
+	#endif
+	this->AddSuffixRewriter.ReplaceText(srcRange, newName);
+      } else {
+	#if DEBUG_AST
+	llvm::errs() << "\033[31m!>\033[0m " << bindName << ": " <<
+	  nodeName << "\n";
+	#endif
+      }
     }
 }
 
@@ -67,7 +96,6 @@ void AddSuffixMatcher::run(const MatchFinder::MatchResult &result) {
   this->replaceInDeclMatch(result,    "FunctionDecl");
   this->replaceInDeclMatch(result,    "VarDecl");
   this->replaceInDeclRefMatch(result, "DeclRefExpr");
-  //this->replaceInDeclRefMatch(result, "VarDeclRefExpr");
 }
 
 void AddSuffixMatcher::onEndOfTranslationUnit() {
@@ -123,10 +151,11 @@ AddSuffixASTConsumer::AddSuffixASTConsumer(
       }
 
     } else { /* 1-9 names left */
-      llvm::errs() << "\033[33m!>\033[0m Adding suffix onto " << 
-	Names[namesLeft - 1 ] << 
-	  " ("<<  namesLeft << " to go)\n";
-
+	#if DEBUG_AST
+	llvm::errs() << "\033[33m!>\033[0m Adding suffix onto " << 
+	  Names[namesLeft - 1 ] << 
+	    " ("<<  namesLeft << " to go)\n";
+	#endif
         // Note that we will not decrement correctly if 
 	// we do it inside of a macro
 	namesLeft--;
