@@ -1,6 +1,7 @@
 #ifndef CLANG_TUTOR_AddSuffix_H
 #define CLANG_TUTOR_AddSuffix_H
 
+#include <unordered_set>
 #include "clang/AST/ASTConsumer.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 #include "clang/Rewrite/Core/Rewriter.h"
@@ -66,7 +67,7 @@ class AddSuffixMatcher
 public:
   explicit AddSuffixMatcher(Rewriter &RewriterForAddSuffix, 
       std::string Suffix)
-      : AddSuffixRewriter(RewriterForAddSuffix), Suffix(Suffix) {}
+      : AddSuffixRewriter(RewriterForAddSuffix), Suffix(Suffix)  {}
 
   void onEndOfTranslationUnit() override;
 
@@ -76,13 +77,17 @@ private:
   void replaceInDeclRefMatch(
     const MatchFinder::MatchResult &result, 
     std::string bindName);
-  void replaceInCallMatch(
-      const MatchFinder::MatchResult &result, 
-      std::string bindName);
-
   void replaceInDeclMatch(
     const MatchFinder::MatchResult &result, 
     std::string bindName);
+  void replaceInMatch(
+    const MatchFinder::MatchResult &result, std::string bindName,
+    SourceRange srcRange, std::string nodeName);
+
+  // To avoid renaming the same token several times
+  // we maintain a set of all locations which have been modified
+  std::unordered_set<std::string> renamedLocations = 
+	  std::unordered_set<std::string>({});
 
   Rewriter AddSuffixRewriter;
   // NOTE: This matcher already knows *what* name to search for 

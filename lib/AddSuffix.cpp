@@ -25,6 +25,7 @@
 #include "llvm/Support/raw_ostream.h"
 #include <string>
 #include <fstream>
+#include <unordered_set>
 
 using namespace clang;
 using namespace ast_matchers;
@@ -41,25 +42,8 @@ void AddSuffixMatcher::replaceInDeclMatch(
       .getNodeAs<DeclaratorDecl>(bindName);
 
     if (node) {
-      std::string nodeName = node->getName().str();
-
-      if (nodeName.find(this->Suffix) == std::string::npos){
-        // If the other matcher has already performed a replacement
-	// do not add a suffix agian
-	SourceRange srcRange = node->getLocation();
-	auto newName = nodeName + this->Suffix;
-
-	#if DEBUG_AST
-	llvm::errs() << "\033[33m!>\033[0m " << bindName << ": " <<
-	  nodeName << "\n";
-	#endif
-	this->AddSuffixRewriter.ReplaceText(srcRange, newName);
-      } else {
-	#if DEBUG_AST
-	llvm::errs() << "\033[31m!>\033[0m " << bindName << ": " <<
-	  nodeName << "\n";
-	#endif
-      }
+      auto nodeName = std::string(node->getName().str());
+      this->replaceInMatch(result, bindName, node->getLocation(), nodeName);
     }
 }
 
@@ -68,29 +52,41 @@ void AddSuffixMatcher::replaceInDeclRefMatch(
 
     const DeclRefExpr *node = result.Nodes
       .getNodeAs<DeclRefExpr>(bindName);
-
+    
     if (node) {
-      auto nodeName = node->getDecl()->getName().str();
-
-      if (nodeName.find(this->Suffix) == std::string::npos){
-        // If the other matcher has already performed a replacement
-	// do not add a suffix agian
-	SourceRange srcRange = node->getExprLoc();
-	auto newName = nodeName + this->Suffix;
-
-	#if DEBUG_AST
-	llvm::errs() << "\033[33m!>\033[0m " << bindName << ": " <<
-	  nodeName << "\n";
-	#endif
-	this->AddSuffixRewriter.ReplaceText(srcRange, newName);
-      } else {
-	#if DEBUG_AST
-	llvm::errs() << "\033[31m!>\033[0m " << bindName << ": " <<
-	  nodeName << "\n";
-	#endif
-      }
+      auto nodeName = std::string(node->getDecl()->getName().str());
+      this->replaceInMatch(result, bindName, node->getExprLoc(), nodeName);
     }
 }
+
+void AddSuffixMatcher::replaceInMatch(
+    const MatchFinder::MatchResult &result, std::string bindName,
+    SourceRange srcRange, std::string nodeName) {
+
+    const SourceManager* mgr = &(this->AddSuffixRewriter.getSourceMgr());
+    const std::string location = std::string(srcRange.printToString(*mgr));
+
+    if (this->renamedLocations.find(location) == 
+	this->renamedLocations.end() ) {
+      // If the other matcher has already performed a replacement
+      // do not add a suffix agian
+      auto newName = nodeName + this->Suffix;
+
+      this->AddSuffixRewriter.ReplaceText(srcRange, newName);
+      this->renamedLocations.insert(location);
+
+      #if DEBUG_AST
+      llvm::errs() << "\033[33m!>\033[0m " << bindName << ": " <<
+	nodeName << "\n";
+      #endif
+    } else {
+      #if DEBUG_AST
+      llvm::errs() << "\033[31m!>\033[0m (Duplicate encounter) " << 
+	bindName << ": " << nodeName << "\n";
+      #endif
+    }
+}
+
 
 void AddSuffixMatcher::run(const MatchFinder::MatchResult &result) {
   this->replaceInDeclMatch(result,    "FunctionDecl");
@@ -131,17 +127,17 @@ AddSuffixASTConsumer::AddSuffixASTConsumer(
    
     if ( (batchCnt = namesLeft / 200) >= 1 ) { /* > 199 names left */
 
-      //for (int _ = 0; _ < batchCnt; _++) {
-      //  addMatchers( anyOf(hasNames200(this->Names, namesLeft)) );
-      //  namesLeft -= 200;
-      //}
+      for (int _ = 0; _ < batchCnt; _++) {
+        addMatchers( anyOf(hasNames200(this->Names, namesLeft)) );
+        namesLeft -= 200;
+      }
 
     } else if ( (batchCnt = namesLeft / 100) >= 1 ) { /* > 99 names left */
       
-      //for (int _ = 0; _ < batchCnt; _++) {
-      //  addMatchers( anyOf(hasNames100(this->Names, namesLeft)) );
-      //  namesLeft -= 100;
-      //}
+      for (int _ = 0; _ < batchCnt; _++) {
+        addMatchers( anyOf(hasNames100(this->Names, namesLeft)) );
+        namesLeft -= 100;
+      }
 
     } else if ( (batchCnt = namesLeft / 10) >= 1 ) { /* > 9 names left */
       
@@ -182,7 +178,6 @@ public:
     );
 
     for (size_t i = 0, size = args.size(); i != size; ++i) {
-      llvm::errs() << "AddSuffix arg = " << args[i] << "\n";
 
       if (args[i] == "-names-file") {
           if (parseArg(diagnostics, namesDiagID, size, args, i)){

@@ -19,24 +19,25 @@ OUTPUT_FILES= $(OUT_LIB) $(OUT_EXEC)
 # replace references inside macros in the original source unless we expand
 # all macros before performing any replacements
 
-# clang -Xclang -ast-dump src/st.c -Isrc -I/usr/include -E
+# clang -Xclang -ast-dump ~/Repos/oniguruma/src/st.c -Isrc -I/usr/include -E
 TARGET_DIR=~/Repos/oniguruma
-INPUT_FILE=$(TARGET_DIR)/src/st.c
+INPUT_FILE=$(TARGET_DIR)/src/regcomp.c
 INCLUDE_DIR=$(TARGET_DIR)/src
 
 # 'rehash' is used inside a macro
-REPLACE_FILE=/home/jonas/Repos/euf/clang-suffix/test/onig_tests.txt
+#REPLACE_FILE=/home/jonas/Repos/euf/clang-suffix/test/onig_tests.txt
+
+REPLACE_FILE=/tmp/rename.txt
 
 
 .PHONY: clean run
 
-$(BUILD_DIR)/Makefile:
-	mkdir -p $(BUILD_DIR)
-	cmake -DCT_Clang_INSTALL_DIR=$(CLANG_DIR) -S. -B $(BUILD_DIR)
-
 $(OUTPUT_FILES): $(BUILD_DIR)/Makefile
 	make -C $(BUILD_DIR) -j$(NPROC) AddSuffix
 
+$(BUILD_DIR)/Makefile:
+	mkdir -p $(BUILD_DIR)
+	cmake -DCT_Clang_INSTALL_DIR=$(CLANG_DIR) -S. -B $(BUILD_DIR)
 
 run: $(OUTPUT_FILES)
 	PLUGIN=$(OUT_LIB) \

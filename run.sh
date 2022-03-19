@@ -66,7 +66,6 @@ diff <(expand_macros $expanded_file) $expanded_file ||
   die "Preprocessing is not idempotent for $TARGET_FILE"
 
 
-# TODO read compile_commands.json for includes
 cd $TARGET_DIR
 clang -cc1 -load "$PLUGIN" \
 	-plugin AddSuffix \
