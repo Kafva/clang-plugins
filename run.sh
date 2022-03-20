@@ -16,6 +16,7 @@ usage="usage: $(basename $0) <file.c>"
 TARGET_FILE=$1
 frontend_flags=$(clang -### "$1" 2>&1 | sed '1,4d; s/" "/", "/g')
 isystem_flags=$(mktemp)
+EXPAND=true
 
 python3 << EOF > $isystem_flags
 print_next = False
@@ -48,23 +49,26 @@ EOF
 # have been expanded...
 #   https://stackoverflow.com/q/65045678/9033629
 
-expand_macros(){
-  # TODO: PASS CORRECT DEFINES HERE
-  # --passthru-defines --passthru-unknown-exprs --passthru-magic-macros
-  pcpp --passthru-comments --passthru-includes ".*" \
-    --line-directive --passthru-unfound-includes  \
-     "$1"
-}
+if $EXPAND; then
+	expand_macros(){
+	  # TODO: PASS CORRECT DEFINES HERE
+	  # --passthru-defines --passthru-unknown-exprs --passthru-magic-macros
+	  pcpp --passthru-comments --passthru-includes ".*" \
+	    --line-directive --passthru-unfound-includes  \
+	     "$1"
+	}
 
-expanded_file=$(mktemp --suffix .c)
+	expanded_file=$(mktemp --suffix .c)
 
-expand_macros $TARGET_FILE > $expanded_file
+	expand_macros $TARGET_FILE > $expanded_file
 
-# Verify that the expanded file does not have any weird
-# re-#define behaviour
-diff <(expand_macros $expanded_file) $expanded_file ||
-  die "Preprocessing is not idempotent for $TARGET_FILE"
-
+	# Verify that the expanded file does not have any weird
+	# re-#define behaviour
+	diff <(expand_macros $expanded_file) $expanded_file ||
+	  die "Preprocessing is not idempotent for $TARGET_FILE"
+else
+	expanded_file="$TARGET_FILE"
+fi
 
 cd $TARGET_DIR
 clang -cc1 -load "$PLUGIN" \

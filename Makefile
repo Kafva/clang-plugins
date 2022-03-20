@@ -20,14 +20,18 @@ OUTPUT_FILES= $(OUT_LIB) $(OUT_EXEC)
 # all macros before performing any replacements
 
 # clang -Xclang -ast-dump ~/Repos/oniguruma/src/st.c -Isrc -I/usr/include -E
-TARGET_DIR=~/Repos/oniguruma
-INPUT_FILE=$(TARGET_DIR)/src/regcomp.c
-INCLUDE_DIR=$(TARGET_DIR)/src
+#TARGET_DIR=~/Repos/oniguruma
+#INPUT_FILE=$(TARGET_DIR)/src/regcomp.c
+#INCLUDE_DIR=$(TARGET_DIR)/src
 
 # 'rehash' is used inside a macro
 #REPLACE_FILE=/home/jonas/Repos/euf/clang-suffix/test/onig_tests.txt
 
 REPLACE_FILE=/tmp/rename.txt
+
+TARGET_DIR=~/Repos/oniguruma
+INCLUDE_DIR=$(TARGET_DIR)/src
+INPUT_FILE=~/Repos/euf/clang-suffix/test/macro.c
 
 
 .PHONY: clean run
@@ -44,7 +48,7 @@ run: $(OUTPUT_FILES)
 	INCLUDE_DIR=$(INCLUDE_DIR) \
 	TARGET_DIR=$(TARGET_DIR) \
 	REPLACE_FILE=$(REPLACE_FILE) \
-	./run.sh $(INPUT_FILE) > /tmp/out.c
+	./run.sh $(INPUT_FILE)
 
 run_cat: run
 	bat /tmp/out.c
