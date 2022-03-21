@@ -27,15 +27,24 @@ OUTPUT_FILES= $(OUT_LIB) $(OUT_EXEC)
 # 'rehash' is used inside a macro
 #REPLACE_FILE=/home/jonas/Repos/euf/clang-suffix/test/onig_tests.txt
 
-REPLACE_FILE=/tmp/rename.txt
-
 #TARGET_DIR=~/Repos/oniguruma
 #INCLUDE_DIR=$(TARGET_DIR)/src
 #INPUT_FILE=~/Repos/euf/clang-suffix/test/macro.c
+#REPLACE_FILE=~/Repos/euf/tests/data/oni_rename.txt
+#EXPAND=false
 
+#TARGET_DIR=~/Repos/openssl
+#INCLUDE_DIR=$(TARGET_DIR)/include
+#INPUT_FILE=~/Repos/openssl/include/openssl/err.h
+#REPLACE_FILE=~/Repos/euf/tests/data/ssl_rename.txt
+#EXPAND=true
+
+# Look at 'redirection_ok()'
 TARGET_DIR=~/Repos/openssl
 INCLUDE_DIR=$(TARGET_DIR)/include
-INPUT_FILE=~/Repos/openssl/include/openssl/err.h
+INPUT_FILE=~/Repos/euf/tests/data/E_http_client.c
+REPLACE_FILE=~/Repos/euf/tests/data/ssl_rename.txt
+EXPAND=false
 
 .PHONY: clean run
 
@@ -51,7 +60,8 @@ run: $(OUTPUT_FILES)
 	INCLUDE_DIR=$(INCLUDE_DIR) \
 	TARGET_DIR=$(TARGET_DIR) \
 	REPLACE_FILE=$(REPLACE_FILE) \
-	./run.sh $(INPUT_FILE)
+	EXPAND=$(EXPAND) \
+	./run.sh $(INPUT_FILE) > /tmp/out.c
 
 run_cat: run
 	bat /tmp/out.c
