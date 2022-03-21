@@ -14,9 +14,9 @@ usage="usage: $(basename $0) <file.c>"
 # We can see the default frontend options used by clang with
 # 	clang -### test/file.cpp
 TARGET_FILE=$1
-frontend_flags=$(clang -### "$1" 2>&1 | sed '1,4d; s/" "/", "/g')
+frontend_flags=$(clang -### "$1" 2>&1 | sed -E '1,4d; s/" "/", "/g; s/(.*)(\(in-process\))(.*)/\1\3/')
 isystem_flags=$(mktemp)
-EXPAND=true
+EXPAND=false
 
 python3 << EOF > $isystem_flags
 print_next = False

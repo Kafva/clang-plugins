@@ -29,10 +29,13 @@ OUTPUT_FILES= $(OUT_LIB) $(OUT_EXEC)
 
 REPLACE_FILE=/tmp/rename.txt
 
-TARGET_DIR=~/Repos/oniguruma
-INCLUDE_DIR=$(TARGET_DIR)/src
-INPUT_FILE=~/Repos/euf/clang-suffix/test/macro.c
+#TARGET_DIR=~/Repos/oniguruma
+#INCLUDE_DIR=$(TARGET_DIR)/src
+#INPUT_FILE=~/Repos/euf/clang-suffix/test/macro.c
 
+TARGET_DIR=~/Repos/openssl
+INCLUDE_DIR=$(TARGET_DIR)/include
+INPUT_FILE=~/Repos/openssl/include/openssl/err.h
 
 .PHONY: clean run
 
