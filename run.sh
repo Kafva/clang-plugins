@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 die(){ echo -e "$1" >&2 ; exit 1; }
 usage="usage: $(basename $0) <file.c>"
-[ -z "$1" ] && die "$usage"
 
 [[  -z "$PLUGIN" || -z "$INCLUDE_DIR" || -z "$TARGET_DIR" || 
   -z "$REPLACE_FILE" ]] && die "Missing environment variable(s)"
+
+[ -n "$1" ] && TARGET_FILE=$1
 
 # https://clang.llvm.org/docs/FAQ.html#id2
 # The -cc1 flag is used to invoke the clang 'frontend', using only the frontend
@@ -13,10 +14,11 @@ usage="usage: $(basename $0) <file.c>"
 # are caused from the fact that the builtin-include path of clang is missing
 # We can see the default frontend options used by clang with
 # 	clang -### test/file.cpp
-TARGET_FILE=$1
-frontend_flags=$(clang -### "$1" 2>&1 | sed -E '1,4d; s/" "/", "/g; s/(.*)(\(in-process\))(.*)/\1\3/')
+
+frontend_flags=$(clang -### "$TARGET_FILE" 2>&1 | sed -E '1,4d; s/" "/", "/g; s/(.*)(\(in-process\))(.*)/\1\3/')
 isystem_flags=$(mktemp)
-EXPAND=false
+
+mkdir -p $TARGET_DIR
 
 python3 << EOF > $isystem_flags
 print_next = False

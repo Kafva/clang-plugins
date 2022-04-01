@@ -40,13 +40,24 @@ OUTPUT_FILES= $(OUT_LIB) $(OUT_EXEC)
 #EXPAND=true
 
 # Look at 'redirection_ok()'
-TARGET_DIR=~/Repos/openssl
-INCLUDE_DIR=$(TARGET_DIR)/include
-INPUT_FILE=~/Repos/euf/tests/data/E_http_client.c
-REPLACE_FILE=~/Repos/euf/tests/data/ssl_rename.txt
-EXPAND=false
+#TARGET_DIR=~/Repos/openssl
+#INCLUDE_DIR=$(TARGET_DIR)/include
+#INPUT_FILE=~/Repos/euf/tests/data/E_http_client.c
+#REPLACE_FILE=~/Repos/euf/tests/data/ssl_rename.txt
+#GREP_TARGET=redirection_ok
+#EXPAND=false
+
+#		#define ADD_DIRECT
+TARGET_DIR=/home/jonas/.cache/euf/oniguruma-65a9b1aa
+INCLUDE_DIR=$(TARGET_DIR)/
+REPLACE_FILE=/home/jonas/Repos/euf/tests/data/oni_rename.txt
+INPUT_FILE=$(TARGET_DIR)/st.c
+GREP_TARGET=rehash
+EXPAND=true
 
 .PHONY: clean run
+
+INPUT_BASE=$(shell basename $(INPUT_FILE))
 
 $(OUTPUT_FILES): $(BUILD_DIR)/Makefile
 	make -C $(BUILD_DIR) -j$(NPROC) AddSuffix
@@ -61,7 +72,12 @@ run: $(OUTPUT_FILES)
 	TARGET_DIR=$(TARGET_DIR) \
 	REPLACE_FILE=$(REPLACE_FILE) \
 	EXPAND=$(EXPAND) \
-	./run.sh $(INPUT_FILE) > /tmp/out.c
+	time ./run.sh $(INPUT_FILE) > /tmp/out.c
+
+example: run
+	@cp /tmp/out.c $(INPUT_BASE)
+	@wc -l $(INPUT_BASE)
+	@grep -C 5 "$(GREP_TARGET)" $(INPUT_BASE) | sed '/^$$/d'  | bat --style full --language c
 
 run_cat: run
 	bat /tmp/out.c
