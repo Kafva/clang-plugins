@@ -35,9 +35,18 @@ using namespace ast_matchers;
 // Add the suffix to matched items
 //-----------------------------------------------------------------------------
 
-void ArgStatesMatcher::matchArgs(
-  const MatchFinder::MatchResult &result, std::string bindName) {
+/// Recursivly enumerate the children of the given statement
+/// and print the bottom level nodes
+void ArgStatesMatcher::getChildren(const Stmt* stmt) {
+      bool hasChild = false;
+      for (auto child : stmt->children()) {
+        hasChild = true;
+        this->getChildren(child);
+      }
 
+      if (!hasChild){
+        stmt->dumpColor();
+      }
 }
 
 void ArgStatesMatcher::run(const MatchFinder::MatchResult &result) {
@@ -47,11 +56,14 @@ void ArgStatesMatcher::run(const MatchFinder::MatchResult &result) {
     const auto *call = result.Nodes.getNodeAs<CallExpr>("CALL");
 
     if (call) {
-      //const auto location = srcMgr->getFileLoc(call->getEndLoc());
-
+      const auto location = srcMgr->getFileLoc(call->getEndLoc());
       #if DEBUG_AST
-        call->dumpColor();
+        llvm::errs() << "==> " << location.printToString(*srcMgr) << "\n";
       #endif
+
+      for (auto call_child : call->children()){
+        this->getChildren(call_child);
+      }
     }
 }
 
@@ -83,7 +95,7 @@ ArgStatesASTConsumer::ArgStatesASTConsumer(
   // on what each variable holds
 
   #if DEBUG_AST
-  llvm::errs() << "\033[33m!>\033[0m Processing " <<  Names[0] << "\n";
+  llvm::errs() << "\033[33m!>\033[0m Processing " << Names[0] << "\n";
   #endif
 
   // To access the parameters to a call we need to match the actual call experssion
@@ -96,8 +108,6 @@ ArgStatesASTConsumer::ArgStatesASTConsumer(
   ).bind("CALL");
 
   this->Finder.addMatcher(matcherForCall, &(this->ArgStatesHandler));
-
-
 }
 
 //-----------------------------------------------------------------------------
