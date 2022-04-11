@@ -7,6 +7,7 @@ set(CLANG_TUTOR_PLUGINS
     UnusedForLoopVar
     CodeRefactor
     AddSuffix
+    ArgStates
     )
 
 set(LACommenter_SOURCES
@@ -26,6 +27,9 @@ set(CodeRefactor_SOURCES
 
 set(AddSuffix_SOURCES
   AddSuffix.cpp)
+
+set(ArgStates_SOURCES
+  ArgStates.cpp)
 
 # CONFIGURE THE PLUGIN LIBRARIES
 # ==============================
