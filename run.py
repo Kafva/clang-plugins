@@ -35,7 +35,7 @@ def get_isystem_flags(source_file: str, dep_path: str) -> list:
 
     return out
 
-def call_arg_states(ccdb_args: list[str]) -> None:
+def call_arg_states(ccdb_args: list[str], cwd: str) -> None:
     '''
     Some of the ccdb arguments are not comptabile with the -cc1 frontend and need to
     be filtered out
@@ -46,14 +46,13 @@ def call_arg_states(ccdb_args: list[str]) -> None:
 
     cmd = [ "clang", "-cc1", "-load", PLUGIN,
         "-plugin", "ArgStates",
-         "-plugin-arg-ArgStates", "-names-file", "-plugin-arg-ArgStates", FUNC_LIST,
-        "-plugin-arg-ArgStates", "-suffix", "-plugin-arg-ArgStates", "_old_aaaaaaa" ] + \
+        "-plugin-arg-ArgStates", "-names-file", "-plugin-arg-ArgStates", FUNC_LIST ] + \
         get_isystem_flags(INPUT_FILE, TARGET_DIR) + \
         [ INPUT_FILE, "-I", "/usr/include" ] + list(ccdb_filtered)
 
-    print(' '.join(cmd))
+    print(f"({cwd})> \n", ' '.join(cmd))
     out = sys.stderr
-    subprocess.run(cmd, cwd = TARGET_DIR, stdout = out, stderr = out)
+    subprocess.run(cmd, cwd = cwd, stdout = out, stderr = out)
 
 
 if len(sys.argv) <= 1:
@@ -71,5 +70,6 @@ with open(f"{TARGET_DIR}/compile_commands.json", mode = 'r', encoding='utf8') as
         if tu['file'] == INPUT_FILE:
             # Note the use of [1:-3] to skip over the cc and output files
             ccdb_args = tu['arguments'][1:-3]
-            call_arg_states(ccdb_args)
+            workdir = tu["directory"]
+            call_arg_states(ccdb_args, workdir)
             break

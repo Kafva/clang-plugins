@@ -36,13 +36,18 @@ using namespace ast_matchers;
 //-----------------------------------------------------------------------------
 
 void ArgStatesMatcher::run(const MatchFinder::MatchResult &result) {
+    const auto srcMgr = result.SourceManager;
 
-    const DeclaratorDecl *node = result.Nodes
-      .getNodeAs<DeclaratorDecl>("TMP_NAME");
+    const DeclRefExpr *node = result.Nodes
+      .getNodeAs<DeclRefExpr>("TMP_NAME");
 
     if (node) {
-      auto nodeName = std::string(node->getName().str());
-      llvm::errs() << "match: " << nodeName << "\n";
+      const auto location = srcMgr->getFileLoc(node->getLocation());
+      auto nodeName = std::string(node->getDecl()->getName().str());
+
+      llvm::errs() << "match: " << nodeName << " at " \
+        << location.printToString(*srcMgr)
+        << "\n";
     }
 }
 
@@ -55,7 +60,8 @@ void ArgStatesMatcher::onEndOfTranslationUnit() {
 
 //-----------------------------------------------------------------------------
 // ArgStatesASTConsumer- implementation
-// https://clang.llvm.org/docs/LibASTMatchersTutorial.html
+//  https://clang.llvm.org/docs/LibASTMatchersTutorial.html
+//  https://opensource.apple.com/source/clang/clang-703.0.31/src/tools/clang/docs/LibASTMatchersReference.html
 // Specifies the node patterns that we want to analyze further in ::run()
 //-----------------------------------------------------------------------------
 
@@ -64,15 +70,25 @@ ArgStatesASTConsumer::ArgStatesASTConsumer(
     ) : ArgStatesHandler(R), Names(Names) {
   // We want to match agianst all variable refernces which are later passed
   // to one of the changed functions in the Names array
+  //
+  // As a starting point, we want to match the FunctionDecl nodes of the enclosing
+  // functions for any call to a changed function. From this node we can then
+  // continue downwards until we reach the actual call of the changed function,
+  // while recording all declared variables and saving the state of those which end up being used
+  //
+  // If we match the call experssions directly we would need to backtrack in the AST to find information
+  // on what each variable holds
 
   #if DEBUG_AST
   llvm::errs() << "\033[33m!>\033[0m Processing " <<  Names[0] << "\n";
   #endif
 
-  auto matchFunction = functionDecl(hasName(Names[0])).bind("TMP_NAME");
 
-  this->Finder.addMatcher(matchFunction, &(this->ArgStatesHandler));
+  const auto matcherForRefExpr = declRefExpr(to(declaratorDecl(
+          hasName(Names[0]))
+  )).bind("TMP_NAME");
 
+  this->Finder.addMatcher(matcherForRefExpr, &(this->ArgStatesHandler));
 }
 
 //-----------------------------------------------------------------------------

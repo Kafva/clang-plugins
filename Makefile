@@ -8,7 +8,8 @@ SRCS=lib/ArgStates.cpp include/ArgStates.hpp
 TARGET_DIR=~/.cache/euf/libexpat-90ed5777/expat
 INCLUDE_DIR=$(TARGET_DIR)/lib
 FUNC_LIST=~/Repos/euf/tests/data/expat_rename_2020_2022.txt
-INPUT_FILE=$(TARGET_DIR)/lib/xmlparse.c
+#INPUT_FILE=$(TARGET_DIR)/lib/xmlparse.c
+INPUT_FILE=$(TARGET_DIR)/xmlwf/xmlfile.c
 
 .PHONY: clean run
 
