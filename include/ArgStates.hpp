@@ -41,6 +41,7 @@ public:
       : ArgStatesRewriter(RewriterForArgStates)  {}
 
   void onEndOfTranslationUnit() override;
+  void matchArgs(const MatchFinder::MatchResult &result, std::string bindName);
 
   void run(const MatchFinder::MatchResult &) override;
 

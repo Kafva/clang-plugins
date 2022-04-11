@@ -35,19 +35,23 @@ using namespace ast_matchers;
 // Add the suffix to matched items
 //-----------------------------------------------------------------------------
 
+void ArgStatesMatcher::matchArgs(
+  const MatchFinder::MatchResult &result, std::string bindName) {
+
+}
+
 void ArgStatesMatcher::run(const MatchFinder::MatchResult &result) {
     const auto srcMgr = result.SourceManager;
 
-    const DeclRefExpr *node = result.Nodes
-      .getNodeAs<DeclRefExpr>("TMP_NAME");
+    //const auto *func = result.Nodes.getNodeAs<FunctionDecl>("FUNC");
+    const auto *call = result.Nodes.getNodeAs<CallExpr>("CALL");
 
-    if (node) {
-      const auto location = srcMgr->getFileLoc(node->getLocation());
-      auto nodeName = std::string(node->getDecl()->getName().str());
+    if (call) {
+      //const auto location = srcMgr->getFileLoc(call->getEndLoc());
 
-      llvm::errs() << "match: " << nodeName << " at " \
-        << location.printToString(*srcMgr)
-        << "\n";
+      #if DEBUG_AST
+        call->dumpColor();
+      #endif
     }
 }
 
@@ -61,7 +65,6 @@ void ArgStatesMatcher::onEndOfTranslationUnit() {
 //-----------------------------------------------------------------------------
 // ArgStatesASTConsumer- implementation
 //  https://clang.llvm.org/docs/LibASTMatchersTutorial.html
-//  https://opensource.apple.com/source/clang/clang-703.0.31/src/tools/clang/docs/LibASTMatchersReference.html
 // Specifies the node patterns that we want to analyze further in ::run()
 //-----------------------------------------------------------------------------
 
@@ -83,12 +86,18 @@ ArgStatesASTConsumer::ArgStatesASTConsumer(
   llvm::errs() << "\033[33m!>\033[0m Processing " <<  Names[0] << "\n";
   #endif
 
+  // To access the parameters to a call we need to match the actual call experssion
+  // The first child of the call expression is a declRefExpr to the function being invoked
+  // Match references to the changed function
+  const auto matcherForCall = callExpr(
+    callee(
+      functionDecl(hasName(Names[0])).bind("FUNC")
+    )
+  ).bind("CALL");
 
-  const auto matcherForRefExpr = declRefExpr(to(declaratorDecl(
-          hasName(Names[0]))
-  )).bind("TMP_NAME");
+  this->Finder.addMatcher(matcherForCall, &(this->ArgStatesHandler));
 
-  this->Finder.addMatcher(matcherForRefExpr, &(this->ArgStatesHandler));
+
 }
 
 //-----------------------------------------------------------------------------
