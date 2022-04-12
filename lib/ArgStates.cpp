@@ -1,17 +1,7 @@
 //==============================================================================
 // DESCRIPTION: ArgStates
 //
-// USAGE:
-//    1. As a loadable Clang plugin:
-//      clang -cc1 -load <BUILD_DIR>/lib/libArgStates.dylib  -plugin  '\'
-//      ArgStates -plugin-arg-ArgStates -class-name '\'
-//      -plugin-arg-ArgStates Base  -plugin-arg-ArgStates -old-name '\'
-//      -plugin-arg-ArgStates run  -plugin-arg-ArgStates -new-name '\'
-//      -plugin-arg-ArgStates walk test/ArgStates_Class.cpp
-//    2. As a standalone tool:
-//       <BUILD_DIR>/bin/ct-code-refactor --class-name=Base --new-name=walk '\'
-//        --old-name=run test/ArgStates_Class.cpp
-//
+// USAGE: TBD
 //==============================================================================
 #include "ArgStates.hpp"
 
@@ -31,121 +21,16 @@ using namespace clang;
 using namespace ast_matchers;
 
 //-----------------------------------------------------------------------------
-// ArgStatesMatcher - implementation
+// FirstPassASTConsumer- implementation
+// FirstPassMatcher-     implementation
 //-----------------------------------------------------------------------------
 
-/// The idea:
-/// Determine what types of arguments are passed to the function
-/// For literal and NULL arguments, we add their value to the state space
-/// For declrefs, we go up in the AST until we reach the enclosing function
-/// and record all assignments to the declref
-/// For other types, we set nondet for now
-/// The key cases we want to detect are
-///   1. When literals are passed
-///   2. When an unintialized (null) variable is passed
-///   3. When a variable is assigned a literal value (and remains unchanged)
-/// We skip considering struct fields (MemberExpr) for now
-//void ArgStatesMatcher::run(const MatchFinder::MatchResult &result) {
-//    return;
-//    // Holds information on the actual sourc code
-//    const auto srcMgr = result.SourceManager;
-//
-//    // Holds contxtual information about the AST, this allows
-//    // us to determine e.g. the parents of a matched node
-//    const auto ctx = result.Context;
-//
-//    const auto *call       = result.Nodes.getNodeAs<CallExpr>("CALL");
-//    const auto *func       = result.Nodes.getNodeAs<FunctionDecl>("FNC");
-//    
-//    const auto *declRef    = result.Nodes.getNodeAs<DeclRefExpr>("REF");
-//    const auto *memExpr    = result.Nodes.getNodeAs<MemberExpr>("MEM");
-//
-//    const auto *intLiteral = result.Nodes.getNodeAs<IntegerLiteral>("INT");
-//    const auto *strLiteral = result.Nodes.getNodeAs<StringLiteral>("STR");
-//    const auto *chrLiteral = result.Nodes.getNodeAs<CharacterLiteral>("CHR");
-//
-//
-//    if (declRef) {
-//      const auto location = srcMgr->getFileLoc(declRef->getEndLoc());
-//
-//      llvm::errs() << "REF> " << location.printToString(*srcMgr)
-//        << " " << declRef->getDecl()->getName()
-//        << "\n";
-//
-//      // If an argument refers to a declref we will walk up the AST and 
-//      // investigate what values are assigned to the identifier in question
-//     
-//      // We could techincally miss stuff if there are aliased ptrs
-//      // to the identifier
-//      
-//
-//      if (call) {
-//        auto parents = ctx->getParents(*call);
-//
-//        for (auto parent : parents){
-//          llvm::errs() << "Call parent:" << 
-//            parent.getNodeKind().asStringRef() << "\n";
-//        }
-//
-//
-//      } else {
-//        PRINT_ERR("No enclosing call");
-//      }
-//
-//      //declRef->dumpColor();
-//    }
-//    if (memExpr) {
-//      const auto location = srcMgr->getFileLoc(memExpr->getEndLoc());
-//
-//      llvm::errs() << "MEM> " << location.printToString(*srcMgr)
-//        << " " << memExpr->getMemberNameInfo().getAsString()
-//        << "\n";
-//    }
-//    if (intLiteral) {
-//      const auto location = srcMgr->getFileLoc(intLiteral->getLocation());
-//
-//      llvm::errs() << "INT> " << location.printToString(*srcMgr)
-//        << " " << intLiteral->getValue()
-//        << "\n";
-//    }
-//    if (strLiteral) {
-//      llvm::errs() << "STR> "
-//        << " " << strLiteral->getString()
-//        << "\n";
-//    }
-//    if (chrLiteral) {
-//      const auto location = srcMgr->getFileLoc(chrLiteral->getLocation());
-//
-//      llvm::errs() << "CHR> " << location.printToString(*srcMgr)
-//        << " " << chrLiteral->getValue()
-//        << "\n";
-//    }
-//    //if (func){
-//    //  const auto location = srcMgr->getFileLoc(func->getEndLoc());
-//    //  llvm::errs() << "FNC> " << location.printToString(*srcMgr)
-//    //    << " " << func->getName()
-//    //    << "\n";
-//    //}
-//}
-
-//void ArgStatesMatcher::onEndOfTranslationUnit() {
-//  // Output to stdout
-//  //ArgStatesRewriter
-//  //    .getEditBuffer(ArgStatesRewriter.getSourceMgr().getMainFileID())
-//  //    .write(llvm::outs());
-//}
-
-//-----------------------------------------------------------------------------
-// ArgStatesASTConsumer- implementation
-//  https://clang.llvm.org/docs/LibASTMatchersTutorial.html
-// Specifies the node patterns that we want to analyze further in ::run()
-//-----------------------------------------------------------------------------
-
+/// Specifies the node patterns that we want to analyze further in ::run()
 FirstPassASTConsumer::FirstPassASTConsumer(
     std::vector<std::string> Names
     ) : MatchHandler(), Names(Names) {
 
-  PRINT_WARN("First pass!");
+  // PRINT_WARN("First pass!");
 
   // We want to match agianst all variable refernces which are later passed
   // to one of the changed functions in the Names array
@@ -218,9 +103,23 @@ FirstPassASTConsumer::FirstPassASTConsumer(
   this->Finder.addMatcher(stringMatcher,  &(this->MatchHandler));
   this->Finder.addMatcher(charMatcher,    &(this->MatchHandler));
 }
+
 void FirstPassMatcher::run(const MatchFinder::MatchResult &result) {
-    PRINT_WARN("First pass! (run)");
-    // Holds information on the actual sourc code
+    // The idea:
+    // Determine what types of arguments are passed to the function
+    // For literal and NULL arguments, we add their value to the state space
+    // For declrefs, we go up in the AST until we reach the enclosing function
+    // and record all assignments to the declref
+    // For other types, we set nondet for now
+    // The key cases we want to detect are
+    //   1. When literals are passed
+    //   2. When an unintialized (null) variable is passed
+    //   3. When a variable is assigned a literal value (and remains unchanged)
+    // We skip considering struct fields (MemberExpr) for now
+
+    // PRINT_WARN("First pass! (run)");
+
+    // Holds information on the actual source code
     const auto srcMgr = result.SourceManager;
 
     // Holds contxtual information about the AST, this allows
@@ -267,11 +166,49 @@ void FirstPassMatcher::run(const MatchFinder::MatchResult &result) {
 
       //declRef->dumpColor();
     }
+    if (memExpr) {
+      const auto location = srcMgr->getFileLoc(memExpr->getEndLoc());
+
+      llvm::errs() << "(1) MEM> " << location.printToString(*srcMgr)
+        << " " << memExpr->getMemberNameInfo().getAsString()
+        << "\n";
+    }
+    if (intLiteral) {
+      const auto location = srcMgr->getFileLoc(intLiteral->getLocation());
+
+      llvm::errs() << "(1) INT> " << location.printToString(*srcMgr)
+        << " " << intLiteral->getValue()
+        << "\n";
+    }
+    if (strLiteral) {
+      llvm::errs() << "(1) STR> "
+        << " " << strLiteral->getString()
+        << "\n";
+    }
+    if (chrLiteral) {
+      const auto location = srcMgr->getFileLoc(chrLiteral->getLocation());
+
+      llvm::errs() << "(1) CHR> " << location.printToString(*srcMgr)
+        << " " << chrLiteral->getValue()
+        << "\n";
+    }
+    //if (func){
+    //  const auto location = srcMgr->getFileLoc(func->getEndLoc());
+    //  llvm::errs() << "FNC> " << location.printToString(*srcMgr)
+    //    << " " << func->getName()
+    //    << "\n";
+    //}
 }
+
+//-----------------------------------------------------------------------------
+// SecondPassASTConsumer- implementation
+// SecondPassMatcher-     implementation
+//-----------------------------------------------------------------------------
 
 SecondPassASTConsumer::SecondPassASTConsumer(std::vector<std::string> Names
     ) : MatchHandler(), Names(Names)  {
-    PRINT_WARN("Second pass!");
+
+    // PRINT_WARN("Second pass!");
 
     const auto isArgumentOfCall = hasAncestor(
         callExpr(callee(
@@ -291,27 +228,12 @@ SecondPassASTConsumer::SecondPassASTConsumer(std::vector<std::string> Names
     ).bind("REF");
 
 
-    // Note that we match the top level member if there are several indirections
-    // i.e. we match 'c' in  'a->b->c'.
-    // There are a lot of edge cases to consider for this, see 
-    //  lib/xmlparse.c:3166 poolStoreString()
-    const auto memMatcher = memberExpr(
-      unless(hasAncestor(memberExpr())),
-      isArgumentOfCall
-    ).bind("MEM");
-    const auto intMatcher = integerLiteral(isArgumentOfCall).bind("INT");
-    const auto stringMatcher = stringLiteral(isArgumentOfCall).bind("STR");
-    const auto charMatcher = characterLiteral(isArgumentOfCall).bind("CHR");
-
     this->Finder.addMatcher(declRefMatcher, &(this->MatchHandler));
-    this->Finder.addMatcher(memMatcher,     &(this->MatchHandler));
-    this->Finder.addMatcher(intMatcher,     &(this->MatchHandler));
-    this->Finder.addMatcher(stringMatcher,  &(this->MatchHandler));
-    this->Finder.addMatcher(charMatcher,    &(this->MatchHandler));
 }
 
 void SecondPassMatcher::run(const MatchFinder::MatchResult &result) {
-    PRINT_WARN("Second pass! (run)");
+    // PRINT_WARN("Second pass! (run)");
+
     // Holds information on the actual sourc code
     const auto srcMgr = result.SourceManager;
 
@@ -320,15 +242,7 @@ void SecondPassMatcher::run(const MatchFinder::MatchResult &result) {
     const auto ctx = result.Context;
 
     const auto *call       = result.Nodes.getNodeAs<CallExpr>("CALL");
-    const auto *func       = result.Nodes.getNodeAs<FunctionDecl>("FNC");
-    
     const auto *declRef    = result.Nodes.getNodeAs<DeclRefExpr>("REF");
-    const auto *memExpr    = result.Nodes.getNodeAs<MemberExpr>("MEM");
-
-    const auto *intLiteral = result.Nodes.getNodeAs<IntegerLiteral>("INT");
-    const auto *strLiteral = result.Nodes.getNodeAs<StringLiteral>("STR");
-    const auto *chrLiteral = result.Nodes.getNodeAs<CharacterLiteral>("CHR");
-
 
     if (declRef) {
       const auto location = srcMgr->getFileLoc(declRef->getEndLoc());
@@ -361,92 +275,8 @@ void SecondPassMatcher::run(const MatchFinder::MatchResult &result) {
     }
 }
 
-//ArgStatesASTConsumer::ArgStatesASTConsumer(
-//    Rewriter &R, std::vector<std::string> Names
-//    ) : ArgStatesHandler(R), Names(Names) {
-//
-//  // Initliase the matchers for both passes...
-//
-//
-//  if (this->ArgStatesHandler.SecondPass) {
-//    PRINT_WARN("Second pass!");
-//    return;
-//  } else {
-//    PRINT_WARN("First pass!");
-//  }
-//  // We want to match agianst all variable refernces which are later passed
-//  // to one of the changed functions in the Names array
-//  //
-//  // As a starting point, we want to match the FunctionDecl nodes of the enclosing
-//  // functions for any call to a changed function. From this node we can then
-//  // continue downwards until we reach the actual call of the changed function,
-//  // while recording all declared variables and saving the state of those which end up being used
-//  //
-//  // If we match the call experssions directly we would need to backtrack in the 
-//  // AST to find information on what each variable holds
-//
-//  // The first child of a call expression is a declRefExpr to the 
-//  // function being invoked 
-//  //
-//  // Provided that we are not checking pointer params during the verification, 
-//  // we can actually make our lives easier by only matching function calls
-//  // were the return value is actually used for something
-//  //
-//  // A basic hack to detect if a return value goes unused would be to exclude
-//  // Nodes on the form
-//  //
-//  //  FUNCTION_DECL
-//  //    COMPOUND_STMT
-//  //      CALL_EXPR
-//  //
-//  //  Determining if the return value of a "nested" call is used would be a lot
-//  //  more complex: https://stackoverflow.com/a/56415042/9033629
-//  //
-//  //  FUNCTION_DECL
-//  //    COMPOUND_STMT
-//  //      <...>
-//  //        CALL_EXPR
-//  //
-//  // Testcase: XML_SetBase in xmlwf/xmlfile.c
-//  const auto isArgumentOfCall = hasAncestor(
-//      callExpr(callee(
-//          functionDecl(hasName(Names[0]))
-//            .bind("FNC")
-//          ),
-//      unless(hasParent(compoundStmt(hasParent(functionDecl()))))
-//  ).bind("CALL"));
-//
-//  // Note that we exclude DeclRefExpr nodes which have a MemberExpr as an
-//  // ancenstor, e.g. arguments on the form 'dtd->pool'. These experssions
-//  // are matched seperatly as MemberExpr to retrieve '->pool' rather than 'dtd'
-//  const auto declRefMatcher = declRefExpr(to(
-//    declaratorDecl()), 
-//    unless(hasAncestor(memberExpr())),
-//    isArgumentOfCall
-//  ).bind("REF");
-//
-//
-//  // Note that we match the top level member if there are several indirections
-//  // i.e. we match 'c' in  'a->b->c'.
-//  // There are a lot of edge cases to consider for this, see 
-//  //  lib/xmlparse.c:3166 poolStoreString()
-//  const auto memMatcher = memberExpr(
-//    unless(hasAncestor(memberExpr())),
-//    isArgumentOfCall
-//  ).bind("MEM");
-//  const auto intMatcher = integerLiteral(isArgumentOfCall).bind("INT");
-//  const auto stringMatcher = stringLiteral(isArgumentOfCall).bind("STR");
-//  const auto charMatcher = characterLiteral(isArgumentOfCall).bind("CHR");
-//
-//  this->FirstPassFinder.addMatcher(declRefMatcher, &(this->ArgStatesHandler));
-//  this->FirstPassFinder.addMatcher(memMatcher,     &(this->ArgStatesHandler));
-//  this->FirstPassFinder.addMatcher(intMatcher,     &(this->ArgStatesHandler));
-//  this->FirstPassFinder.addMatcher(stringMatcher,  &(this->ArgStatesHandler));
-//  this->FirstPassFinder.addMatcher(charMatcher,    &(this->ArgStatesHandler));
-//}
-
 //-----------------------------------------------------------------------------
-// FrontendAction
+// FrontendAction and Registration
 //-----------------------------------------------------------------------------
 class ArgStatesAddPluginAction : public PluginASTAction {
 public:
@@ -522,9 +352,6 @@ private:
   std::vector<std::string> Names;
 };
 
-//-----------------------------------------------------------------------------
-// Registration
-//-----------------------------------------------------------------------------
 static FrontendPluginRegistry::Add<ArgStatesAddPluginAction>
     X(/*NamesFile=*/"ArgStates",
       /*Desc=*/"Enumerate the possible states for arguments to calls of the functions given in the -names-file argument.");

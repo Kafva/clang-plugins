@@ -10,7 +10,7 @@
 
 #define DEBUG_AST true
 
-#define PRINT_ERR(msg) llvm::errs()  << "\033[31m!>\033[0m " << msg << "\n"
+#define PRINT_ERR(msg)  llvm::errs() << "\033[31m!>\033[0m " << msg << "\n"
 #define PRINT_WARN(msg) llvm::errs() << "\033[33m!>\033[0m " << msg << "\n"
 #define PRINT_INFO(msg) llvm::errs() << "\033[34m!>\033[0m " << msg << "\n"
 
@@ -31,32 +31,22 @@
 //
 //  The params which are only used with finite values as arguments can
 //  be restriced during harness generation
+//
+//  https://clang.llvm.org/docs/LibASTMatchersTutorial.html
+
 
 using namespace clang;
 using namespace ast_matchers;
 
 //-----------------------------------------------------------------------------
-// ASTFinder callback for both passes
-//-----------------------------------------------------------------------------
-//class ArgStatesMatcher : public MatchFinder::MatchCallback {
-//public:
-//  //explicit ArgStatesMatcher(Rewriter &RewriterForArgStates)
-//  //    : ArgStatesRewriter(RewriterForArgStates)  {}
-//  explicit ArgStatesMatcher() {}
-//
-//  void onEndOfTranslationUnit() override;
-//  void run(const MatchFinder::MatchResult &) override;
-//
-//private:
-//  //Rewriter ArgStatesRewriter;
-//};
-
-
-
-//-----------------------------------------------------------------------------
-// First pass
+// First pass:
+// In the first pass we will determine every call site to
+// a changed function and what arguments the invocations use
 //-----------------------------------------------------------------------------
 
+/// Callback matcher for the consumer
+/// The ::run() method defines what types of nodes we
+/// we want to match
 class FirstPassMatcher : public MatchFinder::MatchCallback {
 public:
   explicit FirstPassMatcher() {}
@@ -69,9 +59,6 @@ public:
   FirstPassASTConsumer(std::vector<std::string> Names);
 
   void HandleTranslationUnit(ASTContext &ctx) override {
-    // --- First pass ---
-    // In the first pass we will determine every call site to
-    // a changed function and what arguments the invocations use
     this->Finder.matchAST(ctx);
   }
 private:
@@ -81,9 +68,11 @@ private:
 };
 
 
-
 //-----------------------------------------------------------------------------
-// Second pass
+// Second pass:
+// In the second pass we will consider all of the DECLREF arguments
+// found from the previous pass and determine their state space
+// before the function call occurs
 //-----------------------------------------------------------------------------
 class SecondPassMatcher : public MatchFinder::MatchCallback {
 public:
@@ -97,10 +86,6 @@ public:
   SecondPassASTConsumer(std::vector<std::string> Names);
 
   void HandleTranslationUnit(ASTContext &ctx) override {
-    // --- Second pass ---
-    // In the second pass we will consider all of the DECLREF arguments
-    // found from the previous pass and determine their state space
-    // before the function call occurs
     this->Finder.matchAST(ctx);
   }
 private:
@@ -109,61 +94,24 @@ private:
   std::vector<std::string> Names;
 };
 
-
-
-
-
-
 //-----------------------------------------------------------------------------
-// ASTConsumer
+// ASTConsumer driver for each pass
+//  https://stackoverflow.com/a/46738273/9033629
 //-----------------------------------------------------------------------------
 class ArgStatesASTConsumer : public ASTConsumer {
 public:
-  //ArgStatesASTConsumer(Rewriter &R, std::vector<std::string> Names);
-  ArgStatesASTConsumer(std::vector<std::string> Names) {
-  }
+  ArgStatesASTConsumer(std::vector<std::string> Names) {}
 
   void HandleTranslationUnit(ASTContext &ctx) override {
-    // https://stackoverflow.com/questions/46723614/running-multiple-clang-passes
     
     auto firstPass = std::make_unique<FirstPassASTConsumer>(this->Names);
     firstPass->HandleTranslationUnit(ctx);
   
     auto secondPass = std::make_unique<SecondPassASTConsumer>(this->Names);
     secondPass->HandleTranslationUnit(ctx);
-
-    //auto firstPass =  FirstPassASTConsumer(this->Names);
-    //auto secondPass = SecondPassASTConsumer(this->Names);
-    //consumers.push_back(&secondPass);
-    //consumers.push_back(&firstPass);
-
-    //for(auto consumer : consumers) {
-    //  consumer->HandleTranslationUnit(ctx);
-    //}
-
-    // --- First pass ---
-    // In the first pass we will determine every call site to
-    // a changed function and what arguments the invocations use
-    //this->FirstPassFinder.matchAST(ctx);
-    
-    // Set global flag to denote second pass!
-    // Clear matchers on entry to the matcher
-    //this->ArgStatesHandler.SecondPass = true;
-    //PRINT_WARN("Starting...");
-
-    // --- Second pass ---
-    // In the second pass we will consider all of the DECLREF arguments
-    // found from the previous pass and determine their state space
-    // before the function call occurs
-    //this->SecondPassFinder.matchAST(ctx);
   }
 
 private:
-  //std::vector<ASTConsumer*> consumers;
-
-  // (Unused)
-  //MatchFinder Finder;
-  //ArgStatesMatcher ArgStatesHandler;
   std::vector<std::string> Names;
 };
 
