@@ -64,9 +64,13 @@ void ArgStatesMatcher::getChildren(const Stmt* stmt, ASTContext* ctx) {
       }
 }
 
-
+/// The idea:
+/// Determine what types of arguments are passed to the function
+/// For literal and NULL arguments, we add their value to the state space
+/// For declrefs, we go up in the AST until we reach the enclosing function
+/// and record all assignments to the declref
+/// For other types, we set nondet for now
 void ArgStatesMatcher::run(const MatchFinder::MatchResult &result) {
-    
     // Holds information on the actual sourc code
     const auto srcMgr = result.SourceManager;
 
@@ -74,51 +78,45 @@ void ArgStatesMatcher::run(const MatchFinder::MatchResult &result) {
     // us to determine e.g. the parents of a matched node
     const auto ctx = result.Context;
 
-    //const auto *func = result.Nodes.getNodeAs<FunctionDecl>("FUNC");
-    const auto *call = result.Nodes.getNodeAs<CallExpr>("CALL");
+    const auto *call       = result.Nodes.getNodeAs<CallExpr>("CALL");
+    const auto *func       = result.Nodes.getNodeAs<FunctionDecl>("FNC");
+    
+    // Only matching onl declref will produce issues e.g. when we have nodes
+    // on the form 'dtd->pool', declref will only match dtd
+    // we could techincally miss stuff if pool is indirectly changed
+    // through a reference of dtd or if there is an aliased ptr.
+    const auto *declRef    = result.Nodes.getNodeAs<DeclRefExpr>("REF");
 
-    // The idea:
-    // Determine what types of arguments are passed to the function
-    // For literal and NULL arguments, we add their value to the state space
-    // For declrefs, we go up in the AST until we reach the enclosing function
-    // and record all assignments to the declref
-      // For other types, we set nondet for now
+    const auto *intLiteral = result.Nodes.getNodeAs<IntegerLiteral>("INT");
+    const auto *strLiteral = result.Nodes.getNodeAs<StringLiteral>("STR");
+    const auto *chrLiteral = result.Nodes.getNodeAs<CharacterLiteral>("CHR");
 
-    if (call) {
-      const auto location = srcMgr->getFileLoc(call->getEndLoc());
-      #if DEBUG_AST
-        llvm::errs() << "==> " << location.printToString(*srcMgr) << "\n";
-      #endif
+    if (declRef) {
+      const auto location = srcMgr->getFileLoc(declRef->getEndLoc());
 
-      
-      for(auto argument : call->arguments() ){
-        //argument->dumpColor();
-        llvm::errs() << "TYPE:" << "\n";
-        //argument->getType().dump(llvm::errs(), *ctx);
+      llvm::errs() << "REF> " << location.printToString(*srcMgr)
+        << " " << declRef->getDecl()->getName()
+        << "\n";
+      //declRef->dumpColor();
+    }
+    if (intLiteral) {
+      const auto location = srcMgr->getFileLoc(intLiteral->getLocation());
 
-        switch(argument->ExpressionTraitExprClass){
-          case Stmt::ImplicitCastExprClass:
-            llvm::errs() << "==> ImplictExpr " << argument->getValueKind() << "\n";
-            break;
-          default:
-            llvm::errs() << "==> ValueKind " << argument->getValueKind() << "\n";
-            break;
-        }
-        
-      }
+      llvm::errs() << "INT> " << location.printToString(*srcMgr)
+        << " " << intLiteral->getValue()
+        << "\n";
+    }
+    if (strLiteral) {
+      llvm::errs() << "STR> "
+        << " " << strLiteral->getString()
+        << "\n";
+    }
+    if (chrLiteral) {
+      const auto location = srcMgr->getFileLoc(chrLiteral->getLocation());
 
-
-      // This gives Stmt rather than Expr items
-      //for (auto call_child : call->children()){
-      //  this->getChildren(call_child, ctx);
-      //}
-
-      //for (auto parent : ctx->getParents(*call) ){
-      //  llvm::errs() << "==> Call parent " << parent.getNodeKind() << "\n";
-      //  //parent.dump(llvm::errs(), *ctx);
-      //}
-
-
+      llvm::errs() << "CHR> " << location.printToString(*srcMgr)
+        << " " << chrLiteral->getValue()
+        << "\n";
     }
 }
 
@@ -156,13 +154,22 @@ ArgStatesASTConsumer::ArgStatesASTConsumer(
   // To access the parameters to a call we need to match the actual call experssion
   // The first child of the call expression is a declRefExpr to the function being invoked
   // Match references to the changed function
-  const auto matcherForCall = callExpr(
-    callee(
-      functionDecl(hasName(Names[0])).bind("FUNC")
-    )
-  ).bind("CALL");
+  const auto isArgumentOfCall = hasAncestor(callExpr(
+    callee(functionDecl(hasName(Names[0])).bind("FNC"))
+  ).bind("CALL"));
 
-  this->Finder.addMatcher(matcherForCall, &(this->ArgStatesHandler));
+
+  const auto declRefMatcher = declRefExpr(to(
+    declaratorDecl()), isArgumentOfCall
+  ).bind("REF");
+  const auto intMatcher = integerLiteral(isArgumentOfCall).bind("INT");
+  const auto stringMatcher = stringLiteral(isArgumentOfCall).bind("STR");
+  const auto charMatcher = characterLiteral(isArgumentOfCall).bind("CHR");
+
+  this->Finder.addMatcher(declRefMatcher, &(this->ArgStatesHandler));
+  this->Finder.addMatcher(intMatcher,     &(this->ArgStatesHandler));
+  this->Finder.addMatcher(stringMatcher,  &(this->ArgStatesHandler));
+  this->Finder.addMatcher(charMatcher,    &(this->ArgStatesHandler));
 }
 
 //-----------------------------------------------------------------------------
