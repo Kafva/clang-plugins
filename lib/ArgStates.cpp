@@ -70,6 +70,11 @@ void ArgStatesMatcher::getChildren(const Stmt* stmt, ASTContext* ctx) {
 /// For declrefs, we go up in the AST until we reach the enclosing function
 /// and record all assignments to the declref
 /// For other types, we set nondet for now
+/// The key cases we want to detect are
+///   1. When literals are passed
+///   2. When an unintialized (null) variable is passed
+///   3. When a variable is assigned a literal value (and remains unchanged)
+/// We skip considering struct fields (MemberExpr) for now
 void ArgStatesMatcher::run(const MatchFinder::MatchResult &result) {
     // Holds information on the actual sourc code
     const auto srcMgr = result.SourceManager;
@@ -81,15 +86,13 @@ void ArgStatesMatcher::run(const MatchFinder::MatchResult &result) {
     const auto *call       = result.Nodes.getNodeAs<CallExpr>("CALL");
     const auto *func       = result.Nodes.getNodeAs<FunctionDecl>("FNC");
     
-    // Only matching onl declref will produce issues e.g. when we have nodes
-    // on the form 'dtd->pool', declref will only match dtd
-    // we could techincally miss stuff if pool is indirectly changed
-    // through a reference of dtd or if there is an aliased ptr.
     const auto *declRef    = result.Nodes.getNodeAs<DeclRefExpr>("REF");
+    const auto *memExpr    = result.Nodes.getNodeAs<MemberExpr>("MEM");
 
     const auto *intLiteral = result.Nodes.getNodeAs<IntegerLiteral>("INT");
     const auto *strLiteral = result.Nodes.getNodeAs<StringLiteral>("STR");
     const auto *chrLiteral = result.Nodes.getNodeAs<CharacterLiteral>("CHR");
+
 
     if (declRef) {
       const auto location = srcMgr->getFileLoc(declRef->getEndLoc());
@@ -97,7 +100,35 @@ void ArgStatesMatcher::run(const MatchFinder::MatchResult &result) {
       llvm::errs() << "REF> " << location.printToString(*srcMgr)
         << " " << declRef->getDecl()->getName()
         << "\n";
+
+      // If an argument refers to a declref we will walk up the AST and 
+      // investigate what values are assigned to the identifier in question
+     
+      // We could techincally miss stuff if there are aliased ptrs
+      // to the identifier
+      
+
+      if (call) {
+        auto parents = ctx->getParents(*call);
+
+        for (auto parent : parents){
+          llvm::errs() << "Call parent:" << 
+            parent.getNodeKind().asStringRef() << "\n";
+        }
+
+
+      } else {
+        PRINT_ERR("No enclosing call");
+      }
+
       //declRef->dumpColor();
+    }
+    if (memExpr) {
+      const auto location = srcMgr->getFileLoc(memExpr->getEndLoc());
+
+      llvm::errs() << "MEM> " << location.printToString(*srcMgr)
+        << " " << memExpr->getMemberNameInfo().getAsString()
+        << "\n";
     }
     if (intLiteral) {
       const auto location = srcMgr->getFileLoc(intLiteral->getLocation());
@@ -118,6 +149,13 @@ void ArgStatesMatcher::run(const MatchFinder::MatchResult &result) {
         << " " << chrLiteral->getValue()
         << "\n";
     }
+    //if (func){
+    //  const auto location = srcMgr->getFileLoc(func->getEndLoc());
+    //  llvm::errs() << "FNC> " << location.printToString(*srcMgr)
+    //    << " " << func->getName()
+    //    << "\n";
+    //}
+
 }
 
 void ArgStatesMatcher::onEndOfTranslationUnit() {
@@ -151,22 +189,60 @@ ArgStatesASTConsumer::ArgStatesASTConsumer(
   llvm::errs() << "\033[33m!>\033[0m Processing " << Names[0] << "\n";
   #endif
 
-  // To access the parameters to a call we need to match the actual call experssion
-  // The first child of the call expression is a declRefExpr to the function being invoked
-  // Match references to the changed function
-  const auto isArgumentOfCall = hasAncestor(callExpr(
-    callee(functionDecl(hasName(Names[0])).bind("FNC"))
+  // The first child of a call expression is a declRefExpr to the 
+  // function being invoked 
+  //
+  // Provided that we are not checking pointer params during the verification, 
+  // we can actually make our lives easier by only matching function calls
+  // were the return value is actually used for something
+  //
+  // A basic hack to detect if a return value goes unused would be to exclude
+  // Nodes on the form
+  //
+  //  FUNCTION_DECL
+  //    COMPOUND_STMT
+  //      CALL_EXPR
+  //
+  //  Determining if the return value of a "nested" call is used would be a lot
+  //  more complex: https://stackoverflow.com/a/56415042/9033629
+  //
+  //  FUNCTION_DECL
+  //    COMPOUND_STMT
+  //      <...>
+  //        CALL_EXPR
+  //
+  // Testcase: XML_SetBase in xmlwf/xmlfile.c
+  const auto isArgumentOfCall = hasAncestor(
+      callExpr(callee(
+          functionDecl(hasName(Names[0]))
+            .bind("FNC")
+          ),
+      unless(hasParent(compoundStmt(hasParent(functionDecl()))))
   ).bind("CALL"));
 
-
+  // Note that we exclude DeclRefExpr nodes which have a MemberExpr as an
+  // ancenstor, e.g. arguments on the form 'dtd->pool'. These experssions
+  // are matched seperatly as MemberExpr to retrieve '->pool' rather than 'dtd'
   const auto declRefMatcher = declRefExpr(to(
-    declaratorDecl()), isArgumentOfCall
+    declaratorDecl()), 
+    unless(hasAncestor(memberExpr())),
+    isArgumentOfCall
   ).bind("REF");
+
+  // Note that we match the top level member if there are several indirections
+  // i.e. we match 'c' in  'a->b->c'.
+  // There are a lot of edge cases to consider for this, see 
+  //  lib/xmlparse.c:3166 poolStoreString()
+  const auto memMatcher = memberExpr(
+    unless(hasAncestor(memberExpr())),
+    isArgumentOfCall
+  ).bind("MEM");
   const auto intMatcher = integerLiteral(isArgumentOfCall).bind("INT");
   const auto stringMatcher = stringLiteral(isArgumentOfCall).bind("STR");
   const auto charMatcher = characterLiteral(isArgumentOfCall).bind("CHR");
 
   this->Finder.addMatcher(declRefMatcher, &(this->ArgStatesHandler));
+  this->Finder.addMatcher(memMatcher, &(this->ArgStatesHandler));
   this->Finder.addMatcher(intMatcher,     &(this->ArgStatesHandler));
   this->Finder.addMatcher(stringMatcher,  &(this->ArgStatesHandler));
   this->Finder.addMatcher(charMatcher,    &(this->ArgStatesHandler));

@@ -10,6 +10,10 @@
 
 #define DEBUG_AST true
 
+#define PRINT_ERR(msg) llvm::errs()  << "\033[31m!>\033[0m " << msg << "\n"
+#define PRINT_WARN(msg) llvm::errs() << "\033[33m!>\033[0m " << msg << "\n"
+#define PRINT_INFO(msg) llvm::errs() << "\033[34m!>\033[0m " << msg << "\n"
+
 // The plugin receives a list of global symbols as input.
 // We want to determine what arguments are used to call each of these
 // functions. Our record of this data will be on the form
@@ -42,7 +46,6 @@ public:
 
   void onEndOfTranslationUnit() override;
   void getChildren(const Stmt* stmt, ASTContext* ctx);
-  void getLeaf(const Expr* expr, ASTContext* ctx);
 
   void run(const MatchFinder::MatchResult &) override;
 
