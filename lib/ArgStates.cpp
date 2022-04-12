@@ -104,6 +104,18 @@ FirstPassASTConsumer::FirstPassASTConsumer(
   this->Finder.addMatcher(charMatcher,    &(this->MatchHandler));
 }
 
+template<typename T>
+static void dumpMatch(std::string type, T msg, int pass,
+    SourceManager* srcMgr, SourceLocation srcLocation) {
+    #if DEBUG_AST
+      const auto location = srcMgr->getFileLoc(srcLocation);
+      llvm::errs() << "(\033[35m" << pass << "\033[0m) " << type << "> " 
+        << location.printToString(*srcMgr)
+        << " " << msg
+        << "\n";
+    #endif
+}
+
 void FirstPassMatcher::run(const MatchFinder::MatchResult &result) {
     // The idea:
     // Determine what types of arguments are passed to the function
@@ -136,68 +148,30 @@ void FirstPassMatcher::run(const MatchFinder::MatchResult &result) {
     const auto *strLiteral = result.Nodes.getNodeAs<StringLiteral>("STR");
     const auto *chrLiteral = result.Nodes.getNodeAs<CharacterLiteral>("CHR");
 
-
     if (declRef) {
-      const auto location = srcMgr->getFileLoc(declRef->getEndLoc());
-
-      llvm::errs() << "(1) REF> " << location.printToString(*srcMgr)
-        << " " << declRef->getDecl()->getName()
-        << "\n";
-
-      // If an argument refers to a declref we will walk up the AST and 
-      // investigate what values are assigned to the identifier in question
-     
-      // We could techincally miss stuff if there are aliased ptrs
-      // to the identifier
-      
-
-      if (call) {
-        auto parents = ctx->getParents(*call);
-
-        for (auto parent : parents){
-          llvm::errs() << "Call parent:" << 
-            parent.getNodeKind().asStringRef() << "\n";
-        }
-
-
-      } else {
-        PRINT_ERR("No enclosing call");
-      }
-
-      //declRef->dumpColor();
+      const auto name = declRef->getDecl()->getName();
+      dumpMatch("REF", name, 1, srcMgr, declRef->getEndLoc());
     }
     if (memExpr) {
-      const auto location = srcMgr->getFileLoc(memExpr->getEndLoc());
-
-      llvm::errs() << "(1) MEM> " << location.printToString(*srcMgr)
-        << " " << memExpr->getMemberNameInfo().getAsString()
-        << "\n";
+      const auto name = memExpr->getMemberNameInfo().getAsString();
+      dumpMatch("MEM", name, 1, srcMgr, memExpr->getEndLoc());
     }
     if (intLiteral) {
-      const auto location = srcMgr->getFileLoc(intLiteral->getLocation());
-
-      llvm::errs() << "(1) INT> " << location.printToString(*srcMgr)
-        << " " << intLiteral->getValue()
-        << "\n";
+      const auto value =  intLiteral->getValue();
+      dumpMatch("INT", value, 1, srcMgr, intLiteral->getLocation());
     }
     if (strLiteral) {
-      llvm::errs() << "(1) STR> "
-        << " " << strLiteral->getString()
-        << "\n";
+      const auto value =  strLiteral->getString();
+      dumpMatch("STR", value, 1, srcMgr, strLiteral->getEndLoc());
     }
     if (chrLiteral) {
-      const auto location = srcMgr->getFileLoc(chrLiteral->getLocation());
-
-      llvm::errs() << "(1) CHR> " << location.printToString(*srcMgr)
-        << " " << chrLiteral->getValue()
-        << "\n";
+      const auto value =  chrLiteral->getValue();
+      dumpMatch("CHR", value, 1, srcMgr, chrLiteral->getLocation());
     }
-    //if (func){
-    //  const auto location = srcMgr->getFileLoc(func->getEndLoc());
-    //  llvm::errs() << "FNC> " << location.printToString(*srcMgr)
-    //    << " " << func->getName()
-    //    << "\n";
-    //}
+    if (func){
+      const auto name = func->getName(); 
+      dumpMatch("FNC", name, 1, srcMgr, func->getEndLoc() );
+    }
 }
 
 //-----------------------------------------------------------------------------
@@ -245,33 +219,8 @@ void SecondPassMatcher::run(const MatchFinder::MatchResult &result) {
     const auto *declRef    = result.Nodes.getNodeAs<DeclRefExpr>("REF");
 
     if (declRef) {
-      const auto location = srcMgr->getFileLoc(declRef->getEndLoc());
-
-      llvm::errs() << "(2) REF> " << location.printToString(*srcMgr)
-        << " " << declRef->getDecl()->getName()
-        << "\n";
-
-      // If an argument refers to a declref we will walk up the AST and 
-      // investigate what values are assigned to the identifier in question
-     
-      // We could techincally miss stuff if there are aliased ptrs
-      // to the identifier
-      
-
-      if (call) {
-        auto parents = ctx->getParents(*call);
-
-        for (auto parent : parents){
-          llvm::errs() << "Call parent:" << 
-            parent.getNodeKind().asStringRef() << "\n";
-        }
-
-
-      } else {
-        PRINT_ERR("No enclosing call");
-      }
-
-      //declRef->dumpColor();
+      const auto name = declRef->getDecl()->getName();
+      dumpMatch("REF", name, 2, srcMgr, declRef->getEndLoc());
     }
 }
 
