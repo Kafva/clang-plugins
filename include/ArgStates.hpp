@@ -41,7 +41,8 @@ public:
       : ArgStatesRewriter(RewriterForArgStates)  {}
 
   void onEndOfTranslationUnit() override;
-  void getChildren(const Stmt* stmt);
+  void getChildren(const Stmt* stmt, ASTContext* ctx);
+  void getLeaf(const Expr* expr, ASTContext* ctx);
 
   void run(const MatchFinder::MatchResult &) override;
 

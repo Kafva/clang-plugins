@@ -37,23 +37,52 @@ using namespace ast_matchers;
 
 /// Recursivly enumerate the children of the given statement
 /// and print the bottom level nodes
-void ArgStatesMatcher::getChildren(const Stmt* stmt) {
+void ArgStatesMatcher::getChildren(const Stmt* stmt, ASTContext* ctx) {
       bool hasChild = false;
       for (auto child : stmt->children()) {
         hasChild = true;
-        this->getChildren(child);
+        this->getChildren(child, ctx);
       }
 
       if (!hasChild){
-        stmt->dumpColor();
+        // If the statement is a reference to a decleration
+        // fetch the declaretion
+        // stmt->getStmtClassName()
+        switch(stmt->getStmtClass()){
+          case Stmt::NullStmtClass:
+            llvm::errs() << "Null statement\n";
+            break;
+          case Stmt::IntegerLiteralClass:
+            llvm::errs() << "Int literal statement\n";
+            break;
+          case Stmt::DeclRefExprClass:
+            llvm::errs() << "Ref statement " << "\n";
+            break;
+          default:
+            stmt->dumpColor();
+        }
       }
 }
 
+
 void ArgStatesMatcher::run(const MatchFinder::MatchResult &result) {
+    
+    // Holds information on the actual sourc code
     const auto srcMgr = result.SourceManager;
+
+    // Holds contxtual information about the AST, this allows
+    // us to determine e.g. the parents of a matched node
+    const auto ctx = result.Context;
 
     //const auto *func = result.Nodes.getNodeAs<FunctionDecl>("FUNC");
     const auto *call = result.Nodes.getNodeAs<CallExpr>("CALL");
+
+    // The idea:
+    // Determine what types of arguments are passed to the function
+    // For literal and NULL arguments, we add their value to the state space
+    // For declrefs, we go up in the AST until we reach the enclosing function
+    // and record all assignments to the declref
+      // For other types, we set nondet for now
 
     if (call) {
       const auto location = srcMgr->getFileLoc(call->getEndLoc());
@@ -61,9 +90,35 @@ void ArgStatesMatcher::run(const MatchFinder::MatchResult &result) {
         llvm::errs() << "==> " << location.printToString(*srcMgr) << "\n";
       #endif
 
-      for (auto call_child : call->children()){
-        this->getChildren(call_child);
+      
+      for(auto argument : call->arguments() ){
+        //argument->dumpColor();
+        llvm::errs() << "TYPE:" << "\n";
+        //argument->getType().dump(llvm::errs(), *ctx);
+
+        switch(argument->ExpressionTraitExprClass){
+          case Stmt::ImplicitCastExprClass:
+            llvm::errs() << "==> ImplictExpr " << argument->getValueKind() << "\n";
+            break;
+          default:
+            llvm::errs() << "==> ValueKind " << argument->getValueKind() << "\n";
+            break;
+        }
+        
       }
+
+
+      // This gives Stmt rather than Expr items
+      //for (auto call_child : call->children()){
+      //  this->getChildren(call_child, ctx);
+      //}
+
+      //for (auto parent : ctx->getParents(*call) ){
+      //  llvm::errs() << "==> Call parent " << parent.getNodeKind() << "\n";
+      //  //parent.dump(llvm::errs(), *ctx);
+      //}
+
+
     }
 }
 
@@ -117,7 +172,6 @@ class ArgStatesAddPluginAction : public PluginASTAction {
 public:
   bool ParseArgs(const CompilerInstance &CI,
                  const std::vector<std::string> &args) override {
-
     DiagnosticsEngine &diagnostics = CI.getDiagnostics();
 
     unsigned namesDiagID = diagnostics.getCustomDiagID(
@@ -143,13 +197,17 @@ public:
   }
 
   // Returns our ASTConsumer per translation unit.
-  std::unique_ptr<ASTConsumer>
-    CreateASTConsumer(CompilerInstance &CI, StringRef file) override {
+  // This is the entrypoint
+  // https://clang.llvm.org/docs/RAVFrontendAction.html
+  std::unique_ptr<ASTConsumer> CreateASTConsumer(
+      CompilerInstance &CI, StringRef file
+  ) override {
 
-    RewriterForArgStates.setSourceMgr(CI.getSourceManager(),
-              CI.getLangOpts());
+    RewriterForArgStates.setSourceMgr(CI.getSourceManager(), CI.getLangOpts());
+
     return std::make_unique<ArgStatesASTConsumer>(
-  RewriterForArgStates, this->Names);
+        RewriterForArgStates, this->Names
+    );
   }
 
 private:
@@ -169,16 +227,15 @@ private:
   bool parseArg(DiagnosticsEngine &diagnostics, unsigned diagID, int size,
       const std::vector<std::string> &args, int i) {
 
-        if (i + 1 >= size) {
-          diagnostics.Report(diagID);
-          return false;
-        }
-  if (args[i+1].empty()) {
-    diagnostics.Report(diagID);
-    return false;
-  }
-
-  return true;
+      if (i + 1 >= size) {
+        diagnostics.Report(diagID);
+        return false;
+      }
+      if (args[i+1].empty()) {
+        diagnostics.Report(diagID);
+        return false;
+      }
+      return true;
   }
 
   Rewriter RewriterForArgStates;
