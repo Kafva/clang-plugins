@@ -52,6 +52,8 @@ public:
   explicit FirstPassMatcher() {}
   void run(const MatchFinder::MatchResult &) override;
   void onEndOfTranslationUnit() override {};
+
+  std::string Flag;
 };
 
 class FirstPassASTConsumer : public ASTConsumer {
@@ -61,9 +63,11 @@ public:
   void HandleTranslationUnit(ASTContext &ctx) override {
     this->Finder.matchAST(ctx);
   }
+  
+  FirstPassMatcher MatchHandler;
+
 private:
   MatchFinder Finder;
-  FirstPassMatcher MatchHandler;
   std::vector<std::string> Names;
 };
 
@@ -79,6 +83,8 @@ public:
   explicit SecondPassMatcher() {}
   void run(const MatchFinder::MatchResult &) override;
   void onEndOfTranslationUnit() override {};
+
+  std::string Flag;
 };
 
 class SecondPassASTConsumer : public ASTConsumer {
@@ -88,9 +94,11 @@ public:
   void HandleTranslationUnit(ASTContext &ctx) override {
     this->Finder.matchAST(ctx);
   }
+
+  SecondPassMatcher MatchHandler;
+
 private:
   MatchFinder Finder;
-  SecondPassMatcher MatchHandler;
   std::vector<std::string> Names;
 };
 
@@ -106,8 +114,9 @@ public:
     
     auto firstPass = std::make_unique<FirstPassASTConsumer>(this->Names);
     firstPass->HandleTranslationUnit(ctx);
-  
+
     auto secondPass = std::make_unique<SecondPassASTConsumer>(this->Names);
+    secondPass->MatchHandler.Flag = firstPass->MatchHandler.Flag;
     secondPass->HandleTranslationUnit(ctx);
   }
 

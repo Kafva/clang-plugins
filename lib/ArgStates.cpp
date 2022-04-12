@@ -172,6 +172,8 @@ void FirstPassMatcher::run(const MatchFinder::MatchResult &result) {
       const auto name = func->getName(); 
       dumpMatch("FNC", name, 1, srcMgr, func->getEndLoc() );
     }
+
+    this->Flag = "Message passed";
 }
 
 //-----------------------------------------------------------------------------
@@ -206,7 +208,7 @@ SecondPassASTConsumer::SecondPassASTConsumer(std::vector<std::string> Names
 }
 
 void SecondPassMatcher::run(const MatchFinder::MatchResult &result) {
-    // PRINT_WARN("Second pass! (run)");
+    PRINT_WARN("Second pass: " + this->Flag );
 
     // Holds information on the actual sourc code
     const auto srcMgr = result.SourceManager;
