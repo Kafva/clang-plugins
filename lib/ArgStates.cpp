@@ -20,6 +20,82 @@
 using namespace clang;
 using namespace ast_matchers;
 
+//-----------------------------------------------------------------------------
+// Helper functions
+//-----------------------------------------------------------------------------
+
+static void getCallPath(ASTContext* ctx, BoundNodes::IDToNodeMap &nodeMap, 
+    DynTypedNode &parent, std::string bindName, std::vector<DynTypedNode> &callPath){
+    // Go up until we reach a call experssion
+    callPath.push_back(parent); 
+
+    // The ASTNodeKind returned from this method reflects the strings seen in
+    //  clang -ast-dump
+    if (parent.getNodeKind().asStringRef() == "CallExpr"){
+      // There should be an enum for us to match agianst but I cannot find it...
+      return;
+    } else {
+      auto parents = ctx->getParents(parent);
+      if (parents.size()>0) {
+        // We assume .getParents() only returns one entry
+        auto newParent = parents[0];
+        getCallPath(ctx, nodeMap, newParent, bindName, callPath);
+      }
+    }
+}
+
+static std::string getParamName(const CallExpr* matchedCall, ASTContext* ctx, 
+    BoundNodes::IDToNodeMap &nodeMap, std::string bindName){
+
+    std::string paramName = "";
+    int  argumentIndex = -1;
+    auto matchedNode = nodeMap.at(bindName);
+    auto parents = ctx->getParents(matchedNode);
+    auto callPath = std::vector<DynTypedNode>();
+    
+    if (parents.size()>0) {
+      // We assume .getParents() only returns one entry
+      auto parent = parents[0];
+      // Move up recursivly until we reach a call expression
+      // (we need to drop implicit casts etc.)
+      // Since we save all of the nodes in the path we traverse
+      // upwards, we can check which of the arguments our path corresponds to
+      getCallPath(ctx, nodeMap, parent, bindName, callPath);
+
+      // We use .push_back() so the last item will be the actual call,
+      // we are intrested in the direct child from the call that is on the
+      // path towards our match, which will be at the penultimate position, 
+      // if the callPath only contains one item, then our matched node is 
+      // a direct child of the callexpr
+      auto ourPath = callPath.size() > 1 ? 
+        callPath[callPath.size()-2] : 
+        matchedNode; 
+
+      auto ourExpr = ourPath.get<Expr>();
+
+      argumentIndex = 0;
+      for (auto call_arg : matchedCall->arguments()){
+        // Break once we find an argument in the matched call expression
+        // that matches the node we found traversing the AST upwards from
+        // our match
+        if (call_arg->getID(*ctx) == ourExpr->getID(*ctx) ) {
+          break;
+        }
+        argumentIndex++;
+      }
+
+      // No match found if the index reaches NumArgs
+      if (argumentIndex < int(matchedCall->getNumArgs()) ){
+        // Fetch the name of the parameter from the function declaration
+        const auto funcDecl   = matchedCall->getDirectCallee();
+        const auto paramDecl  = funcDecl->getParamDecl(argumentIndex);
+        paramName             = std::string(paramDecl->getName());
+      } 
+    }
+
+    return paramName;
+}
+
 template<typename T>
 static void dumpMatch(std::string type, T msg, int pass,
     SourceManager* srcMgr, SourceLocation srcLocation) {
@@ -30,6 +106,7 @@ static void dumpMatch(std::string type, T msg, int pass,
         << " " << msg
         << "\n";
     #endif
+    return;
 }
 
 //-----------------------------------------------------------------------------
@@ -116,74 +193,6 @@ FirstPassASTConsumer::FirstPassASTConsumer(
   this->Finder.addMatcher(charMatcher,    &(this->MatchHandler));
 }
 
-static void getCallPath(ASTContext* ctx, BoundNodes::IDToNodeMap &nodeMap, 
-    DynTypedNode &parent, std::string bindName, std::vector<DynTypedNode> &callPath){
-    // Go up until we reach a call experssion
-    callPath.push_back(parent); 
-
-    // The ASTNodeKind returned from this method reflects the strings seen in
-    // clang -ast-dump
-    if (parent.getNodeKind().asStringRef() == "CallExpr"){
-      // There should be an enum for us to match agianst but I cannot find it
-      return;
-    } else {
-      auto parents = ctx->getParents(parent);
-      if (parents.size()>0) {
-        // We assume .getParents() only returns one entry
-        auto newParent = parents[0];
-        getCallPath(ctx, nodeMap, newParent, bindName, callPath);
-      }
-    }
-}
-
-static int getArgumentIndex(const CallExpr* matchedCall, ASTContext* ctx, 
-    BoundNodes::IDToNodeMap &nodeMap, std::string bindName){
-
-    int  argumentIndex = -1;
-    auto matchedNode = nodeMap.at(bindName);
-    auto parents = ctx->getParents(matchedNode);
-    auto callPath = std::vector<DynTypedNode>();
-    
-    if (parents.size()>0) {
-      // We assume .getParents() only returns one entry
-      auto parent = parents[0];
-      // Move up recursivly until we reach a Call expression
-      // (we need to drop implicit casts etc.)
-      // Since we have saved all of the nodes in the path we traversed
-      // upwards, we can check which of the arguments our path corresponds to
-      getCallPath(ctx, nodeMap, parent, bindName, callPath);
-
-      // We use .push_back() so the last item will be the actual call
-      // we are intrested in the direct child from the call that is on the
-      // path towards our match, which will be at the penultimate position, 
-      // if the callPath only contains one item, then our matched node is 
-      // a direct child of the callexpr
-      auto ourPath = callPath.size() > 1 ? 
-        callPath[callPath.size()-2] : 
-        matchedNode; 
-
-      auto ourExpr = ourPath.get<Expr>();
-
-      argumentIndex = 0;
-      for (auto call_arg : matchedCall->arguments()){
-        // Break once we find an argument in the matched call expression
-        // that matches the node we found traversing the AST upwards from
-        // our match
-        if (call_arg->getID(*ctx) == ourExpr->getID(*ctx) ) {
-          break;
-        }
-        argumentIndex++;
-      }
-
-      if (argumentIndex == int(matchedCall->getNumArgs()) ){
-        // No match found
-        return -1;
-      }
-    }
-
-    return argumentIndex;
-}
-
 void FirstPassMatcher::run(const MatchFinder::MatchResult &result) {
     // The idea:
     // Determine what types of arguments are passed to the function
@@ -221,11 +230,12 @@ void FirstPassMatcher::run(const MatchFinder::MatchResult &result) {
     const auto *chrLiteral = result.Nodes.getNodeAs<CharacterLiteral>("CHR");
 
     if (declRef) {
+      // This includes a match for the actual function token (index -1)
       const auto name = declRef->getDecl()->getName();
       dumpMatch("REF", name, 1, srcMgr, declRef->getEndLoc());
       
-      int argumentIndex = getArgumentIndex(call, ctx, nodeMap, "REF"); 
-      PRINT_WARN("REF argIndex " << argumentIndex);
+      auto paramName = getParamName(call, ctx, nodeMap, "REF"); 
+      PRINT_WARN("REF arg " << paramName);
     }
     if (memExpr) {
       const auto name = memExpr->getMemberNameInfo().getAsString();
@@ -236,8 +246,10 @@ void FirstPassMatcher::run(const MatchFinder::MatchResult &result) {
       dumpMatch("INT", value, 1, srcMgr, intLiteral->getLocation());
 
       // Determine which parameter this argument has been given to
-      int argumentIndex = getArgumentIndex(call, ctx, nodeMap, "INT"); 
-      PRINT_WARN("INT argIndex " << argumentIndex);
+      auto paramName = getParamName(call, ctx, nodeMap, "INT"); 
+      PRINT_WARN("INT arg " << paramName);
+
+
 
     }
     if (strLiteral) {
