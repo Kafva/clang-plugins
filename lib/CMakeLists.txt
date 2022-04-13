@@ -29,7 +29,9 @@ set(AddSuffix_SOURCES
   AddSuffix.cpp)
 
 set(ArgStates_SOURCES
-  ArgStates.cpp)
+  ArgStates.cpp
+  Util.cpp
+)
 
 # CONFIGURE THE PLUGIN LIBRARIES
 # ==============================

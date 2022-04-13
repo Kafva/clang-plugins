@@ -4,6 +4,7 @@
 // USAGE: TBD
 //==============================================================================
 #include "ArgStates.hpp"
+#include "Util.hpp"
 
 #include "clang/AST/Expr.h"
 #include "clang/AST/ExprCXX.h"
@@ -13,10 +14,8 @@
 #include "clang/Frontend/FrontendPluginRegistry.h"
 #include "clang/Tooling/Refactoring/Rename/RenamingAction.h"
 #include "llvm/Support/raw_ostream.h"
-#include <string>
 #include <fstream>
 #include <iostream>
-#include <unordered_set>
 
 using namespace clang;
 using namespace ast_matchers;
@@ -24,75 +23,6 @@ using namespace ast_matchers;
 //-----------------------------------------------------------------------------
 // Helper functions
 //-----------------------------------------------------------------------------
-
-#define INDENT "  "
-
-static void addComma(std::ofstream &f, uint iter, uint size){
-    if (iter != size) {
-      f << ", ";
-    }
-}
-
-template<typename T>
-static void writeStates(std::ofstream &f, std::set<T> Set) {
-      // Integer state
-      uint stateSize = Set.size();
-      uint k = 0;
-      for (const auto &item : Set) {
-        f << item;
-        k++;
-        addComma(f,k,stateSize);
-      }
-}
-
-void DumpArgStates(std::unordered_map<std::string,std::vector<ArgState>> &functionStates,
- std::string filename){
-  // We will dump the FunctionStates as JSON for the current TU only and join the
-  // values externally in Python
-  if (functionStates.size() == 0){
-    return;
-  }
-  PRINT_WARN("Time to write states");
-
-  std::ofstream f;
-  f.open(filename, std::ofstream::out|std::ofstream::trunc);
-
-  f << "{\n";
-
-  // Iterate over key:values in the map
-  uint functionCnt = functionStates.size();
-  uint i = 0;
-  for (const auto &funcMap : functionStates) {
-    f << INDENT << "\"" << funcMap.first << "\": {\n";
-
-
-    uint argCnt = funcMap.second.size();
-    uint j = 0;
-    for (const auto &argState : funcMap.second) {
-
-      f << INDENT << INDENT << "\"" << argState.ParamName << "\": [\n"
-        << INDENT << INDENT << INDENT;
-
-      // Only one of the state sets will contain values for an argument
-      writeStates(f, argState.IntStates);
-      writeStates(f, argState.ChrStates);
-      writeStates(f, argState.StrStates);
-
-      f << "\n" << INDENT << INDENT << "]\n";
-      
-      j++;
-      addComma(f,j,argCnt);
-    }
-
-    f << INDENT << "}\n";
-
-    i++;
-    addComma(f,i,functionCnt);
-  }
-  
-  f << "}\n";
-  f.close();
-}
 
 static void getCallPath(ASTContext* ctx, BoundNodes::IDToNodeMap &nodeMap, 
   DynTypedNode &parent, std::string bindName, std::vector<DynTypedNode> &callPath){
@@ -185,8 +115,7 @@ static void dumpMatch(std::string type, T msg, int pass,
 
 /// Specifies the node patterns that we want to analyze further in ::run()
 FirstPassASTConsumer::
-FirstPassASTConsumer(std::vector<std::string> Names): 
-MatchHandler(), Names(Names) {
+FirstPassASTConsumer(std::vector<std::string>& Names): MatchHandler() {
   // PRINT_WARN("First pass!");
 
   // We want to match agianst all variable refernces which are later passed
@@ -226,7 +155,7 @@ MatchHandler(), Names(Names) {
   // Testcase: XML_SetBase in xmlwf/xmlfile.c
   const auto isArgumentOfCall = hasAncestor(
       callExpr(callee(
-          functionDecl(hasName("XML_ExternalEntityParserCreate")
+          functionDecl(hasName(Names[0])
           ).bind("FNC")
           ),
       unless(hasParent(compoundStmt(hasParent(functionDecl()))))
@@ -250,6 +179,11 @@ MatchHandler(), Names(Names) {
     unless(hasAncestor(memberExpr())),
     isArgumentOfCall
   ).bind("MEM");
+
+  // We need the literals to be direct descendents (barring the implicitCastExpr)
+  // otherwise they could be part of larger experssions, e.g. 'foo + 6'
+  // For now, any literal that is not a direct descendent of the call will be
+  // considered an undet() value
   const auto intMatcher = integerLiteral(isArgumentOfCall).bind("INT");
   const auto stringMatcher = stringLiteral(isArgumentOfCall).bind("STR");
   const auto charMatcher = characterLiteral(isArgumentOfCall).bind("CHR");
@@ -383,13 +317,12 @@ run(const MatchFinder::MatchResult &result) {
 //-----------------------------------------------------------------------------
 
 SecondPassASTConsumer::
-SecondPassASTConsumer(std::vector<std::string> Names) : 
-MatchHandler(), Names(Names)  {
+SecondPassASTConsumer(std::vector<std::string>& Names) : MatchHandler() {
   // PRINT_WARN("Second pass!");
 
   const auto isArgumentOfCall = hasAncestor(
       callExpr(callee(
-          functionDecl(hasName("XML_ExternalEntityParserCreate"))
+          functionDecl(hasName(Names[0]))
             .bind("FNC")
           ),
       unless(hasParent(compoundStmt(hasParent(functionDecl()))))
@@ -426,9 +359,17 @@ run(const MatchFinder::MatchResult &result) {
     }
 }
 
+
+
 //-----------------------------------------------------------------------------
 // FrontendAction and Registration
 //-----------------------------------------------------------------------------
+
+ArgStatesASTConsumer::~ArgStatesASTConsumer(){
+    // The dumping to disk is per TU
+    DumpArgStates(this->FunctionStates, OUTPUT_FILE);
+}
+
 class ArgStatesAddPluginAction : public PluginASTAction {
 public:
   bool ParseArgs(const CompilerInstance &CI,
@@ -459,8 +400,8 @@ public:
   // Returns our ASTConsumer per translation unit.
   // This is essentially our entrypoint
   //  https://clang.llvm.org/docs/RAVFrontendAction.html
-  std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI, StringRef file) 
-  override {
+  std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI, 
+  StringRef file) override {
     return std::make_unique<ArgStatesASTConsumer>(this->Names);
   }
 

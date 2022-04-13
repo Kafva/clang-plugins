@@ -1,22 +1,16 @@
-#ifndef CLANG_TUTOR_ArgStates_H
-#define CLANG_TUTOR_ArgStates_H
+#ifndef ArgStates_H
+#define ArgStates_H
 
-#include <unordered_map>
 #include "clang/AST/ASTConsumer.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 #include "clang/Rewrite/Core/Rewriter.h"
 #include "clang/Rewrite/Frontend/FixItRewriter.h"
 #include "clang/Tooling/CommonOptionsParser.h"
 
-#define DEBUG_AST true
-
-#define PRINT_ERR(msg)  llvm::errs() << "\033[31m!>\033[0m " << msg << "\n"
-#define PRINT_WARN(msg) llvm::errs() << "\033[33m!>\033[0m " << msg << "\n"
-#define PRINT_INFO(msg) llvm::errs() << "\033[34m!>\033[0m " << msg << "\n"
+#include "Base.hpp"
 
 using namespace clang;
 using namespace ast_matchers;
-typedef unsigned uint;
   
 // The plugin receives a list of global symbols as input.
 // We want to determine what arguments are used to call each of these
@@ -44,24 +38,6 @@ typedef unsigned uint;
 // We will need a seperate struct for passing values to the second pass
 //-----------------------------------------------------------------------------
 
-#define OUTPUT_FILE "/home/jonas/Repos/euf/clang-suffix/arg_states.json"
-
-struct ArgState {
-  // The ArgName will be empty for literals
-  std::string ParamName;
-  std::string ArgName;
-
-  // We only need one set of states for each Arg
-  // A union{} cannot be used on complex types
-  // and a template type would cause issues since
-  // different versions would need to be in the same array
-  std::set<char> ChrStates;
-  std::set<uint64_t> IntStates;
-  std::set<std::string> StrStates;
-};
-
-void DumpArgStates(std::unordered_map<std::string,std::vector<ArgState>> &FunctionStates, 
-      std::string filename);
 
 //-----------------------------------------------------------------------------
 // First pass:
@@ -85,7 +61,7 @@ public:
 
 class FirstPassASTConsumer : public ASTConsumer {
 public:
-  FirstPassASTConsumer(std::vector<std::string> Names);
+  FirstPassASTConsumer(std::vector<std::string>& Names);
 
   void HandleTranslationUnit(ASTContext &ctx) override {
     this->Finder.matchAST(ctx);
@@ -95,7 +71,6 @@ public:
 
 private:
   MatchFinder Finder;
-  std::vector<std::string> Names;
 };
 
 
@@ -117,7 +92,7 @@ public:
 
 class SecondPassASTConsumer : public ASTConsumer {
 public:
-  SecondPassASTConsumer(std::vector<std::string> Names);
+  SecondPassASTConsumer(std::vector<std::string>& Names);
 
   void HandleTranslationUnit(ASTContext &ctx) override {
     this->Finder.matchAST(ctx);
@@ -127,7 +102,6 @@ public:
 
 private:
   MatchFinder Finder;
-  std::vector<std::string> Names;
 };
 
 //-----------------------------------------------------------------------------
@@ -136,12 +110,10 @@ private:
 //-----------------------------------------------------------------------------
 class ArgStatesASTConsumer : public ASTConsumer {
 public:
-  ArgStatesASTConsumer(std::vector<std::string> Names) {}
-
-  ~ArgStatesASTConsumer(){
-    // The dumping to disk is per TU
-    DumpArgStates(this->FunctionStates, OUTPUT_FILE);
+  ArgStatesASTConsumer(std::vector<std::string>& Names) {
+    this->Names = Names;
   }
+  ~ArgStatesASTConsumer();
 
   void HandleTranslationUnit(ASTContext &ctx) override {
     
@@ -153,7 +125,7 @@ public:
     // Copy over the function states
     // Note that the first pass only adds literals and the second adds declrefs
     secondPass->MatchHandler.FunctionStates = firstPass->MatchHandler.FunctionStates;
-    secondPass->HandleTranslationUnit(ctx);
+    // secondPass->HandleTranslationUnit(ctx);
 
     // Overwrite the states
     this->FunctionStates = secondPass->MatchHandler.FunctionStates;

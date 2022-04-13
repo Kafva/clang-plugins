@@ -4,8 +4,8 @@ import json, re, subprocess, sys
 TARGET_DIR="/home/jonas/.cache/euf/libexpat-90ed5777/expat"
 PLUGIN="/home/jonas/Repos/euf/clang-suffix/build/lib/libArgStates.so"
 FUNC_LIST="/home/jonas/Repos/euf/tests/data/expat_rename_2020_2022.txt"
-SOURCE_SUB_DIR=f"{TARGET_DIR}/xmlwf"
-#SOURCE_SUB_DIR=f"{TARGET_DIR}/lib"
+#SOURCE_SUB_DIR=f"{TARGET_DIR}/xmlwf"
+SOURCE_SUB_DIR=f"{TARGET_DIR}/lib"
 
 def get_isystem_flags(source_file: str, dep_path: str) -> list:
     '''
