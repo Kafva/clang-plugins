@@ -1,7 +1,7 @@
 #ifndef CLANG_TUTOR_ArgStates_H
 #define CLANG_TUTOR_ArgStates_H
 
-#include <unordered_set>
+#include <unordered_map>
 #include "clang/AST/ASTConsumer.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 #include "clang/Rewrite/Core/Rewriter.h"
@@ -40,26 +40,20 @@ using namespace ast_matchers;
 
 //-----------------------------------------------------------------------------
 // Argument state structures
+// We will need a seperate struct for passing values to the second pass
 //-----------------------------------------------------------------------------
 struct ArgState {
   // The ArgName will be empty for literals
   std::string ParamName;
   std::string ArgName;
-};
 
-struct ChrArgState : public ArgState {
-  std::vector<char> States;
-};
-struct IntArgState : public ArgState {
-  std::vector<int> States;
-};
-struct StrArgState : public ArgState {
-  std::vector<std::string> States;
-};
-
-struct FunctionState {
-  std::string Spelling;
-  std::vector<ArgState> Arguments;
+  // We only need one set of states for each Arg
+  // A union{} cannot be used on complex types
+  // and a template type would cause issues since
+  // different versions would need to be in the same array
+  std::set<char> ChrStates;
+  std::set<uint64_t> IntStates;
+  std::set<std::string> StrStates;
 };
 
 //-----------------------------------------------------------------------------
@@ -77,7 +71,9 @@ public:
   void run(const MatchFinder::MatchResult &) override;
   void onEndOfTranslationUnit() override {};
 
-  std::vector<FunctionState> FunctionStates;
+  // Maps function names to lists of ArgState structs
+  std::unordered_map<std::string,std::vector<ArgState>> FunctionStates;
+
 };
 
 class FirstPassASTConsumer : public ASTConsumer {
@@ -108,7 +104,6 @@ public:
   void run(const MatchFinder::MatchResult &) override;
   void onEndOfTranslationUnit() override {};
 
-  std::vector<FunctionState> FunctionStates;
 };
 
 class SecondPassASTConsumer : public ASTConsumer {
@@ -141,7 +136,9 @@ public:
 
     auto secondPass = std::make_unique<SecondPassASTConsumer>(this->Names);
 
-    secondPass->MatchHandler.FunctionStates = firstPass->MatchHandler.FunctionStates;
+    // Copy over the function states
+    // Note that the first pass only adds literals and the second adds declrefs
+    //secondPass->MatchHandler.FunctionStates = firstPass->MatchHandler.FunctionStates;
 
     secondPass->HandleTranslationUnit(ctx);
 

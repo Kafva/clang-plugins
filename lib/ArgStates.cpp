@@ -211,46 +211,90 @@ void FirstPassMatcher::run(const MatchFinder::MatchResult &result) {
     // Holds contxtual information about the AST, this allows
     // us to determine e.g. the parents of a matched node
     const auto ctx = result.Context;
-    
+
     auto nodeMap = result.Nodes.getMap();
 
     const auto *call       = result.Nodes.getNodeAs<CallExpr>("CALL");
     const auto *func       = result.Nodes.getNodeAs<FunctionDecl>("FNC");
-    
-    // To correlate the arguments that we match agianst to parameters in the function call
-    // we need to traverse the call experssion and pair the arguments with the Parms from the FNC
-    const int numArgs = call->getNumArgs();
 
-    #if 1
     const auto *declRef    = result.Nodes.getNodeAs<DeclRefExpr>("REF");
     const auto *memExpr    = result.Nodes.getNodeAs<MemberExpr>("MEM");
 
     const auto *intLiteral = result.Nodes.getNodeAs<IntegerLiteral>("INT");
     const auto *strLiteral = result.Nodes.getNodeAs<StringLiteral>("STR");
     const auto *chrLiteral = result.Nodes.getNodeAs<CharacterLiteral>("CHR");
+    
+    // To correlate the arguments that we match agianst to parameters in the function call
+    // we need to traverse the call experssion and pair the arguments with the Parms from the FNC
+    //const int  numArgs = call->getNumArgs();
+
+    std::string funcName;    
+    if (!func){
+      PRINT_ERR("No FunctionDecl matched");
+      return;
+    } else {
+      funcName = std::string(func->getName());
+    }
 
     if (declRef) {
       // This includes a match for the actual function token (index -1)
       const auto name = declRef->getDecl()->getName();
       dumpMatch("REF", name, 1, srcMgr, declRef->getEndLoc());
       
+      // During the second pass we must be able to identify 
+      //  * the enclosing function
+      //  * the callee
+      //  * the argument name
+      //  for every reference that we encounter in the 1st pass
+      
       auto paramName = getParamName(call, ctx, nodeMap, "REF"); 
-      PRINT_WARN("REF arg " << paramName);
+      PRINT_WARN("param arg " << paramName);
     }
     if (memExpr) {
       const auto name = memExpr->getMemberNameInfo().getAsString();
       dumpMatch("MEM", name, 1, srcMgr, memExpr->getEndLoc());
     }
     if (intLiteral) {
-      const auto value =  intLiteral->getValue();
+      const auto value =  intLiteral->getValue().getLimitedValue();
       dumpMatch("INT", value, 1, srcMgr, intLiteral->getLocation());
 
       // Determine which parameter this argument has been given to
       auto paramName = getParamName(call, ctx, nodeMap, "INT"); 
-      PRINT_WARN("INT arg " << paramName);
+
+      if (this->FunctionStates.count(funcName)==0) {
+        // Add an entry for the function if neccessary
+        this->FunctionStates.insert(std::make_pair(
+              funcName, 
+              std::vector<ArgState>())
+        );
+      }
+
+      auto statesVector = this->FunctionStates.at(funcName);
+      bool hasExistingState = false;
+
+      // Insert the encountered state for the given param
+      for (unsigned i = 0; i < statesVector.size(); i++){
+        if (statesVector[i].ParamName == paramName){
+          statesVector[i].IntStates.insert(value);
+          hasExistingState = true;
+          break;
+        }
+      }
+
+      if (!hasExistingState){
+        // Add a new ArgState entry if neccessary
+        std::set<uint64_t> stateSet = {value};
+        struct ArgState states = { 
+          .ParamName = paramName, 
+          .ArgName = "",
+          .IntStates = stateSet 
+        }; 
+        statesVector.push_back(states);
+      }
 
 
-
+      //this->FunctionStates.at(funcName)[0].IntStates
+      PRINT_WARN("INT param " << paramName  );
     }
     if (strLiteral) {
       const auto value =  strLiteral->getString();
@@ -260,11 +304,10 @@ void FirstPassMatcher::run(const MatchFinder::MatchResult &result) {
       const auto value =  chrLiteral->getValue();
       dumpMatch("CHR", value, 1, srcMgr, chrLiteral->getLocation());
     }
-    if (func){
-      const auto name = func->getName(); 
-      dumpMatch("FNC", name, 1, srcMgr, func->getEndLoc() );
-    }
-    #endif
+    //if (func){
+    //  const auto name = func->getName(); 
+    //  dumpMatch("FNC", name, 1, srcMgr, func->getEndLoc() );
+    //}
 }
 
 //-----------------------------------------------------------------------------
@@ -304,9 +347,9 @@ void SecondPassMatcher::run(const MatchFinder::MatchResult &result) {
 
     // Holds contxtual information about the AST, this allows
     // us to determine e.g. the parents of a matched node
-    const auto ctx = result.Context;
+    //const auto ctx = result.Context;
 
-    const auto *call       = result.Nodes.getNodeAs<CallExpr>("CALL");
+    //const auto *call       = result.Nodes.getNodeAs<CallExpr>("CALL");
     const auto *declRef    = result.Nodes.getNodeAs<DeclRefExpr>("REF");
 
     if (declRef) {
