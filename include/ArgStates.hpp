@@ -14,6 +14,10 @@
 #define PRINT_WARN(msg) llvm::errs() << "\033[33m!>\033[0m " << msg << "\n"
 #define PRINT_INFO(msg) llvm::errs() << "\033[34m!>\033[0m " << msg << "\n"
 
+using namespace clang;
+using namespace ast_matchers;
+typedef unsigned uint;
+  
 // The plugin receives a list of global symbols as input.
 // We want to determine what arguments are used to call each of these
 // functions. Our record of this data will be on the form
@@ -26,22 +30,22 @@
 //        "param2": [
 //          "getchar()", "0"
 //        ]
-//      }
+//    }
 //  }
 //
 //  The params which are only used with finite values as arguments can
 //  be restriced during harness generation
 //
 //  https://clang.llvm.org/docs/LibASTMatchersTutorial.html
-
-
-using namespace clang;
-using namespace ast_matchers;
+//
 
 //-----------------------------------------------------------------------------
 // Argument state structures
 // We will need a seperate struct for passing values to the second pass
 //-----------------------------------------------------------------------------
+
+#define OUTPUT_FILE "/home/jonas/Repos/euf/clang-suffix/arg_states.json"
+
 struct ArgState {
   // The ArgName will be empty for literals
   std::string ParamName;
@@ -55,6 +59,9 @@ struct ArgState {
   std::set<uint64_t> IntStates;
   std::set<std::string> StrStates;
 };
+
+void DumpArgStates(std::unordered_map<std::string,std::vector<ArgState>> &FunctionStates, 
+      std::string filename);
 
 //-----------------------------------------------------------------------------
 // First pass:
@@ -103,6 +110,8 @@ public:
   explicit SecondPassMatcher() {}
   void run(const MatchFinder::MatchResult &) override;
   void onEndOfTranslationUnit() override {};
+  
+  std::unordered_map<std::string,std::vector<ArgState>> FunctionStates;
 
 };
 
@@ -129,6 +138,11 @@ class ArgStatesASTConsumer : public ASTConsumer {
 public:
   ArgStatesASTConsumer(std::vector<std::string> Names) {}
 
+  ~ArgStatesASTConsumer(){
+    // The dumping to disk is per TU
+    DumpArgStates(this->FunctionStates, OUTPUT_FILE);
+  }
+
   void HandleTranslationUnit(ASTContext &ctx) override {
     
     auto firstPass = std::make_unique<FirstPassASTConsumer>(this->Names);
@@ -138,15 +152,17 @@ public:
 
     // Copy over the function states
     // Note that the first pass only adds literals and the second adds declrefs
-    //secondPass->MatchHandler.FunctionStates = firstPass->MatchHandler.FunctionStates;
-
+    secondPass->MatchHandler.FunctionStates = firstPass->MatchHandler.FunctionStates;
     secondPass->HandleTranslationUnit(ctx);
 
-    PRINT_WARN("Time to write states");
+    // Overwrite the states
+    this->FunctionStates = secondPass->MatchHandler.FunctionStates;
   }
 
 private:
   std::vector<std::string> Names;
+  std::unordered_map<std::string,std::vector<ArgState>> FunctionStates;
+
 };
 
 #endif

@@ -16,6 +16,7 @@ $(BUILD_DIR)/Makefile:
 
 run: $(OUTPUT)
 	./run.py
+	cat arg_states.json
 
 clean:
 	rm -rf $(BUILD_DIR)

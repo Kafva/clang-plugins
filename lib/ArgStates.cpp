@@ -15,6 +15,7 @@
 #include "llvm/Support/raw_ostream.h"
 #include <string>
 #include <fstream>
+#include <iostream>
 #include <unordered_set>
 
 using namespace clang;
@@ -24,8 +25,77 @@ using namespace ast_matchers;
 // Helper functions
 //-----------------------------------------------------------------------------
 
+#define INDENT "  "
+
+static void addComma(std::ofstream &f, uint iter, uint size){
+    if (iter != size) {
+      f << ", ";
+    }
+}
+
+template<typename T>
+static void writeStates(std::ofstream &f, std::set<T> Set) {
+      // Integer state
+      uint stateSize = Set.size();
+      uint k = 0;
+      for (const auto &item : Set) {
+        f << item;
+        k++;
+        addComma(f,k,stateSize);
+      }
+}
+
+void DumpArgStates(std::unordered_map<std::string,std::vector<ArgState>> &functionStates,
+ std::string filename){
+  // We will dump the FunctionStates as JSON for the current TU only and join the
+  // values externally in Python
+  if (functionStates.size() == 0){
+    return;
+  }
+  PRINT_WARN("Time to write states");
+
+  std::ofstream f;
+  f.open(filename, std::ofstream::out|std::ofstream::trunc);
+
+  f << "{\n";
+
+  // Iterate over key:values in the map
+  uint functionCnt = functionStates.size();
+  uint i = 0;
+  for (const auto &funcMap : functionStates) {
+    f << INDENT << "\"" << funcMap.first << "\": {\n";
+
+
+    uint argCnt = funcMap.second.size();
+    uint j = 0;
+    for (const auto &argState : funcMap.second) {
+
+      f << INDENT << INDENT << "\"" << argState.ParamName << "\": [\n"
+        << INDENT << INDENT << INDENT;
+
+      // Only one of the state sets will contain values for an argument
+      writeStates(f, argState.IntStates);
+      writeStates(f, argState.ChrStates);
+      writeStates(f, argState.StrStates);
+
+      f << "\n" << INDENT << INDENT << "]\n";
+      
+      j++;
+      addComma(f,j,argCnt);
+    }
+
+    f << INDENT << "}\n";
+
+    i++;
+    addComma(f,i,functionCnt);
+  }
+  
+  f << "}\n";
+  f.close();
+}
+
 static void getCallPath(ASTContext* ctx, BoundNodes::IDToNodeMap &nodeMap, 
-    DynTypedNode &parent, std::string bindName, std::vector<DynTypedNode> &callPath){
+  DynTypedNode &parent, std::string bindName, std::vector<DynTypedNode> &callPath){
     // Go up until we reach a call experssion
     callPath.push_back(parent); 
 
@@ -45,8 +115,7 @@ static void getCallPath(ASTContext* ctx, BoundNodes::IDToNodeMap &nodeMap,
 }
 
 static std::string getParamName(const CallExpr* matchedCall, ASTContext* ctx, 
-    BoundNodes::IDToNodeMap &nodeMap, std::string bindName){
-
+  BoundNodes::IDToNodeMap &nodeMap, std::string bindName){
     std::string paramName = "";
     int  argumentIndex = -1;
     auto matchedNode = nodeMap.at(bindName);
@@ -115,10 +184,9 @@ static void dumpMatch(std::string type, T msg, int pass,
 //-----------------------------------------------------------------------------
 
 /// Specifies the node patterns that we want to analyze further in ::run()
-FirstPassASTConsumer::FirstPassASTConsumer(
-    std::vector<std::string> Names
-    ) : MatchHandler(), Names(Names) {
-
+FirstPassASTConsumer::
+FirstPassASTConsumer(std::vector<std::string> Names): 
+MatchHandler(), Names(Names) {
   // PRINT_WARN("First pass!");
 
   // We want to match agianst all variable refernces which are later passed
@@ -193,7 +261,8 @@ FirstPassASTConsumer::FirstPassASTConsumer(
   this->Finder.addMatcher(charMatcher,    &(this->MatchHandler));
 }
 
-void FirstPassMatcher::run(const MatchFinder::MatchResult &result) {
+void FirstPassMatcher::
+run(const MatchFinder::MatchResult &result) {
     // The idea:
     // Determine what types of arguments are passed to the function
     // For literal and NULL arguments, we add their value to the state space
@@ -248,7 +317,7 @@ void FirstPassMatcher::run(const MatchFinder::MatchResult &result) {
       //  for every reference that we encounter in the 1st pass
       
       auto paramName = getParamName(call, ctx, nodeMap, "REF"); 
-      PRINT_WARN("param arg " << paramName);
+      PRINT_WARN("REF param arg " << paramName);
     }
     if (memExpr) {
       const auto name = memExpr->getMemberNameInfo().getAsString();
@@ -269,13 +338,13 @@ void FirstPassMatcher::run(const MatchFinder::MatchResult &result) {
         );
       }
 
-      auto statesVector = this->FunctionStates.at(funcName);
+      auto statesVectorSize = this->FunctionStates.at(funcName).size();
       bool hasExistingState = false;
 
       // Insert the encountered state for the given param
-      for (unsigned i = 0; i < statesVector.size(); i++){
-        if (statesVector[i].ParamName == paramName){
-          statesVector[i].IntStates.insert(value);
+      for (uint i = 0; i < statesVectorSize; i++){
+        if ( this->FunctionStates.at(funcName)[i].ParamName == paramName){
+          this->FunctionStates.at(funcName)[i].IntStates.insert(value);
           hasExistingState = true;
           break;
         }
@@ -283,18 +352,16 @@ void FirstPassMatcher::run(const MatchFinder::MatchResult &result) {
 
       if (!hasExistingState){
         // Add a new ArgState entry if neccessary
-        std::set<uint64_t> stateSet = {value};
-        struct ArgState states = { 
+        struct ArgState states = {
           .ParamName = paramName, 
           .ArgName = "",
-          .IntStates = stateSet 
+          .IntStates = {value}
         }; 
-        statesVector.push_back(states);
+        this->FunctionStates.at(funcName).push_back(states);
       }
 
-
-      //this->FunctionStates.at(funcName)[0].IntStates
-      PRINT_WARN("INT param " << paramName  );
+      auto size = this->FunctionStates.at(funcName)[0].IntStates.size();
+      PRINT_WARN("INT param " << paramName  << " "<< size );
     }
     if (strLiteral) {
       const auto value =  strLiteral->getString();
@@ -315,33 +382,34 @@ void FirstPassMatcher::run(const MatchFinder::MatchResult &result) {
 // SecondPassMatcher-     implementation
 //-----------------------------------------------------------------------------
 
-SecondPassASTConsumer::SecondPassASTConsumer(std::vector<std::string> Names
-    ) : MatchHandler(), Names(Names)  {
+SecondPassASTConsumer::
+SecondPassASTConsumer(std::vector<std::string> Names) : 
+MatchHandler(), Names(Names)  {
+  // PRINT_WARN("Second pass!");
 
-    // PRINT_WARN("Second pass!");
+  const auto isArgumentOfCall = hasAncestor(
+      callExpr(callee(
+          functionDecl(hasName("XML_ExternalEntityParserCreate"))
+            .bind("FNC")
+          ),
+      unless(hasParent(compoundStmt(hasParent(functionDecl()))))
+  ).bind("CALL"));
 
-    const auto isArgumentOfCall = hasAncestor(
-        callExpr(callee(
-            functionDecl(hasName("XML_ExternalEntityParserCreate"))
-              .bind("FNC")
-            ),
-        unless(hasParent(compoundStmt(hasParent(functionDecl()))))
-    ).bind("CALL"));
-
-    // Note that we exclude DeclRefExpr nodes which have a MemberExpr as an
-    // ancenstor, e.g. arguments on the form 'dtd->pool'. These experssions
-    // are matched seperatly as MemberExpr to retrieve '->pool' rather than 'dtd'
-    const auto declRefMatcher = declRefExpr(to(
-      declaratorDecl()), 
-      unless(hasAncestor(memberExpr())),
-      isArgumentOfCall
-    ).bind("REF");
+  // Note that we exclude DeclRefExpr nodes which have a MemberExpr as an
+  // ancenstor, e.g. arguments on the form 'dtd->pool'. These experssions
+  // are matched seperatly as MemberExpr to retrieve '->pool' rather than 'dtd'
+  const auto declRefMatcher = declRefExpr(to(
+    declaratorDecl()), 
+    unless(hasAncestor(memberExpr())),
+    isArgumentOfCall
+  ).bind("REF");
 
 
-    this->Finder.addMatcher(declRefMatcher, &(this->MatchHandler));
+  this->Finder.addMatcher(declRefMatcher, &(this->MatchHandler));
 }
 
-void SecondPassMatcher::run(const MatchFinder::MatchResult &result) {
+void SecondPassMatcher::
+run(const MatchFinder::MatchResult &result) {
     // Holds information on the actual sourc code
     const auto srcMgr = result.SourceManager;
 
@@ -367,7 +435,7 @@ public:
                  const std::vector<std::string> &args) override {
     DiagnosticsEngine &diagnostics = CI.getDiagnostics();
 
-    unsigned namesDiagID = diagnostics.getCustomDiagID(
+    uint namesDiagID = diagnostics.getCustomDiagID(
       DiagnosticsEngine::Error, "missing -names-file"
     );
 
@@ -391,16 +459,9 @@ public:
   // Returns our ASTConsumer per translation unit.
   // This is essentially our entrypoint
   //  https://clang.llvm.org/docs/RAVFrontendAction.html
-  std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI, StringRef file) override {
-
+  std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI, StringRef file) 
+  override {
     return std::make_unique<ArgStatesASTConsumer>(this->Names);
-    //RewriterForArgStates.setSourceMgr(CI.getSourceManager(), CI.getLangOpts());
-
-    //auto astConsumer = std::make_unique<ArgStatesASTConsumer>(
-    //    RewriterForArgStates, this->Names
-    //);
-
-    //return astConsumer;
   }
 
 private:
@@ -417,7 +478,7 @@ private:
     }
   }
 
-  bool parseArg(DiagnosticsEngine &diagnostics, unsigned diagID, int size,
+  bool parseArg(DiagnosticsEngine &diagnostics, uint diagID, int size,
       const std::vector<std::string> &args, int i) {
 
       if (i + 1 >= size) {
