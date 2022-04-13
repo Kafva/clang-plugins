@@ -42,7 +42,7 @@ def call_arg_states(ccdb_args: list[str], cwd: str) -> None:
     Some of the ccdb arguments are not comptabile with the -cc1 frontend and need to
     be filtered out
     '''
-    blacklist = r"|".join([ "-g", "-c", r"-f.*", r"-W.*" ])
+    blacklist = r"|".join(["-g", "-c", r"-f.*", r"-W.*"])
 
     ccdb_filtered  = filter(lambda a: not re.match(blacklist, a), ccdb_args)
 
@@ -56,7 +56,6 @@ def call_arg_states(ccdb_args: list[str], cwd: str) -> None:
     print(f"({cwd})> \n", ' '.join(cmd))
     out = sys.stderr
     subprocess.run(cmd, cwd = cwd, stdout = out, stderr = out)
-
 
 # We will run the plugin once PER changed name PER source directory
 # If we try to run if once per changed named the include paths become inconsisitent between TUs

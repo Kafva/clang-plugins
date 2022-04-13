@@ -20,6 +20,18 @@
 using namespace clang;
 using namespace ast_matchers;
 
+template<typename T>
+static void dumpMatch(std::string type, T msg, int pass,
+    SourceManager* srcMgr, SourceLocation srcLocation) {
+    #if DEBUG_AST
+      const auto location = srcMgr->getFileLoc(srcLocation);
+      llvm::errs() << "(\033[35m" << pass << "\033[0m) " << type << "> " 
+        << location.printToString(*srcMgr)
+        << " " << msg
+        << "\n";
+    #endif
+}
+
 //-----------------------------------------------------------------------------
 // FirstPassASTConsumer- implementation
 // FirstPassMatcher-     implementation
@@ -69,8 +81,8 @@ FirstPassASTConsumer::FirstPassASTConsumer(
   // Testcase: XML_SetBase in xmlwf/xmlfile.c
   const auto isArgumentOfCall = hasAncestor(
       callExpr(callee(
-          functionDecl(hasName("XML_ExternalEntityParserCreate"))
-            .bind("FNC")
+          functionDecl(hasName("XML_ExternalEntityParserCreate")
+          ).bind("FNC")
           ),
       unless(hasParent(compoundStmt(hasParent(functionDecl()))))
   ).bind("CALL"));
@@ -104,25 +116,12 @@ FirstPassASTConsumer::FirstPassASTConsumer(
   this->Finder.addMatcher(charMatcher,    &(this->MatchHandler));
 }
 
-template<typename T>
-static void dumpMatch(std::string type, T msg, int pass,
-    SourceManager* srcMgr, SourceLocation srcLocation) {
-    #if DEBUG_AST
-      const auto location = srcMgr->getFileLoc(srcLocation);
-      llvm::errs() << "(\033[35m" << pass << "\033[0m) " << type << "> " 
-        << location.printToString(*srcMgr)
-        << " " << msg
-        << "\n";
-    #endif
-}
-
 void FirstPassMatcher::run(const MatchFinder::MatchResult &result) {
     // The idea:
     // Determine what types of arguments are passed to the function
     // For literal and NULL arguments, we add their value to the state space
-    // For declrefs, we go up in the AST until we reach the enclosing function
-    // and record all assignments to the declref
-    // For other types, we set nondet for now
+    // For declrefs, we save the names of each argument and query for all references
+    // to them before the call (in the same enclosing function) in the next pass
     // The key cases we want to detect are
     //   1. When literals are passed
     //   2. When an unintialized (null) variable is passed
@@ -137,10 +136,39 @@ void FirstPassMatcher::run(const MatchFinder::MatchResult &result) {
     // Holds contxtual information about the AST, this allows
     // us to determine e.g. the parents of a matched node
     const auto ctx = result.Context;
+    
+    auto nodeMap = result.Nodes.getMap();
 
     const auto *call       = result.Nodes.getNodeAs<CallExpr>("CALL");
     const auto *func       = result.Nodes.getNodeAs<FunctionDecl>("FNC");
     
+
+    int len=0;
+    // To correlate the arguments that we match agianst to parameters in the function call
+    // we need to traverse the call experssion and pair the arguments with the Parms from the FNC
+    for (auto call_arg : call->arguments()  ){
+      // Ignore any implicit cast to the type specified for the parameter
+      // in the function decl
+      len++;
+      call_arg = call_arg->IgnoreParenImpCasts();
+      
+      //switch(call_arg->ClassifyLValue(*ctx)){
+      //  case Expr::LValueClassification::LV_Valid:
+      //    PRINT_WARN("Lvalue");
+      //    call_arg->getva
+      //  default:
+      //    PRINT_WARN("idk");
+      //}
+    }
+
+    PRINT_WARN( std::to_string(len) );
+
+    // Call child cnt == 3
+    // Can we get the index of our match?
+    // If so, then we know which param we matched
+
+
+    #if 1
     const auto *declRef    = result.Nodes.getNodeAs<DeclRefExpr>("REF");
     const auto *memExpr    = result.Nodes.getNodeAs<MemberExpr>("MEM");
 
@@ -159,6 +187,23 @@ void FirstPassMatcher::run(const MatchFinder::MatchResult &result) {
     if (intLiteral) {
       const auto value =  intLiteral->getValue();
       dumpMatch("INT", value, 1, srcMgr, intLiteral->getLocation());
+
+      // Determine which parameter this argument has been given to
+
+      auto parents = ctx->getParents(nodeMap.at("INT"));
+
+      if (parents.size()>0) {
+        // We assume .getParents() only returns one entry
+        auto parent = parents[0];
+        
+        // We need to drop implicit casts
+        auto call = parent.get<CallExpr>();
+
+        
+      } else {
+        dumpMatch("ERROR (no parent) INT", value, 1, srcMgr, intLiteral->getLocation());
+      }
+
     }
     if (strLiteral) {
       const auto value =  strLiteral->getString();
@@ -172,8 +217,7 @@ void FirstPassMatcher::run(const MatchFinder::MatchResult &result) {
       const auto name = func->getName(); 
       dumpMatch("FNC", name, 1, srcMgr, func->getEndLoc() );
     }
-
-    this->Flag = "Message passed";
+    #endif
 }
 
 //-----------------------------------------------------------------------------
@@ -208,8 +252,6 @@ SecondPassASTConsumer::SecondPassASTConsumer(std::vector<std::string> Names
 }
 
 void SecondPassMatcher::run(const MatchFinder::MatchResult &result) {
-    PRINT_WARN("Second pass: " + this->Flag );
-
     // Holds information on the actual sourc code
     const auto srcMgr = result.SourceManager;
 

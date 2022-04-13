@@ -39,6 +39,30 @@ using namespace clang;
 using namespace ast_matchers;
 
 //-----------------------------------------------------------------------------
+// Argument state structures
+//-----------------------------------------------------------------------------
+struct ArgState {
+  // The ArgName will be empty for literals
+  std::string ParamName;
+  std::string ArgName;
+};
+
+struct ChrArgState : public ArgState {
+  std::vector<char> States;
+};
+struct IntArgState : public ArgState {
+  std::vector<int> States;
+};
+struct StrArgState : public ArgState {
+  std::vector<std::string> States;
+};
+
+struct FunctionState {
+  std::string Spelling;
+  std::vector<ArgState> Arguments;
+};
+
+//-----------------------------------------------------------------------------
 // First pass:
 // In the first pass we will determine every call site to
 // a changed function and what arguments the invocations use
@@ -53,7 +77,7 @@ public:
   void run(const MatchFinder::MatchResult &) override;
   void onEndOfTranslationUnit() override {};
 
-  std::string Flag;
+  std::vector<FunctionState> FunctionStates;
 };
 
 class FirstPassASTConsumer : public ASTConsumer {
@@ -84,7 +108,7 @@ public:
   void run(const MatchFinder::MatchResult &) override;
   void onEndOfTranslationUnit() override {};
 
-  std::string Flag;
+  std::vector<FunctionState> FunctionStates;
 };
 
 class SecondPassASTConsumer : public ASTConsumer {
@@ -116,8 +140,12 @@ public:
     firstPass->HandleTranslationUnit(ctx);
 
     auto secondPass = std::make_unique<SecondPassASTConsumer>(this->Names);
-    secondPass->MatchHandler.Flag = firstPass->MatchHandler.Flag;
+
+    secondPass->MatchHandler.FunctionStates = firstPass->MatchHandler.FunctionStates;
+
     secondPass->HandleTranslationUnit(ctx);
+
+    PRINT_WARN("Time to write states");
   }
 
 private:
