@@ -116,6 +116,26 @@ FirstPassASTConsumer::FirstPassASTConsumer(
   this->Finder.addMatcher(charMatcher,    &(this->MatchHandler));
 }
 
+static void getCallPath(ASTContext* ctx, BoundNodes::IDToNodeMap &nodeMap, 
+    DynTypedNode &parent, std::string bindName, std::vector<DynTypedNode> &callPath){
+    // Go up until we reach a call experssion
+    callPath.push_back(parent); 
+
+    // The ASTNodeKind returned from this method reflects the strings seen in
+    // clang -ast-dump
+    if (parent.getNodeKind().asStringRef() == "CallExpr"){
+      // There should be an enum for us to match agianst but I cannot find it
+      return;
+    } else {
+      auto parents = ctx->getParents(parent);
+      if (parents.size()>0) {
+        // We assume .getParents() only returns one entry
+        auto newParent = parents[0];
+        getCallPath(ctx, nodeMap, newParent, bindName, callPath);
+      }
+    }
+}
+
 void FirstPassMatcher::run(const MatchFinder::MatchResult &result) {
     // The idea:
     // Determine what types of arguments are passed to the function
@@ -143,25 +163,9 @@ void FirstPassMatcher::run(const MatchFinder::MatchResult &result) {
     const auto *func       = result.Nodes.getNodeAs<FunctionDecl>("FNC");
     
 
-    int len=0;
     // To correlate the arguments that we match agianst to parameters in the function call
     // we need to traverse the call experssion and pair the arguments with the Parms from the FNC
-    for (auto call_arg : call->arguments()  ){
-      // Ignore any implicit cast to the type specified for the parameter
-      // in the function decl
-      len++;
-      call_arg = call_arg->IgnoreParenImpCasts();
-      
-      //switch(call_arg->ClassifyLValue(*ctx)){
-      //  case Expr::LValueClassification::LV_Valid:
-      //    PRINT_WARN("Lvalue");
-      //    call_arg->getva
-      //  default:
-      //    PRINT_WARN("idk");
-      //}
-    }
-
-    PRINT_WARN( std::to_string(len) );
+    const int numArgs = call->getNumArgs();
 
     // Call child cnt == 3
     // Can we get the index of our match?
@@ -189,20 +193,43 @@ void FirstPassMatcher::run(const MatchFinder::MatchResult &result) {
       dumpMatch("INT", value, 1, srcMgr, intLiteral->getLocation());
 
       // Determine which parameter this argument has been given to
-
       auto parents = ctx->getParents(nodeMap.at("INT"));
-
+      auto callPath = std::vector<DynTypedNode>();
+      
       if (parents.size()>0) {
         // We assume .getParents() only returns one entry
         auto parent = parents[0];
-        
-        // We need to drop implicit casts
-        auto call = parent.get<CallExpr>();
+        // Move up recursivly until we reach a Call expression
+        // (we need to drop implicit casts etc.)
+        // Since we have saved all of the nodes in the path we traversed
+        // upwards, we can check which of the arguments our path corresponds to
+        getCallPath(ctx, nodeMap, parent, "INT", callPath);
 
-        
-      } else {
-        dumpMatch("ERROR (no parent) INT", value, 1, srcMgr, intLiteral->getLocation());
+        // We use .push_back() so the last item will be the actual call
+        // we are intrested in the direct child from the call that is on the
+        // path towards our match, which will be at the penultimate position, 
+        // if the callPath only contains one item, then our matched node is 
+        // a direct child of the callexpr
+        auto ourPath = callPath.size() > 1 ? 
+          callPath[callPath.size()-2] : 
+          nodeMap.at("INT"); 
+
+        auto ourExpr = ourPath.get<Expr>();
+
+        int argumentIndex = 0;
+        for (auto call_arg : call->arguments()){
+          // Break once we find an argument in the matched call expression
+          // that matches the node we found traversing the AST upwards from
+          // our match
+          if (call_arg->getID(*ctx) == ourExpr->getID(*ctx) ) {
+            break;
+          }
+          argumentIndex++;
+        }
+
+        PRINT_WARN( "call path " << callPath.size() << " " << argumentIndex);
       }
+      
 
     }
     if (strLiteral) {
