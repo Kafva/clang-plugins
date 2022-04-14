@@ -13,14 +13,24 @@ static void addComma(std::ofstream &f, uint iter, uint size, bool newline=false)
     }
     newline && f << "\n";
 }
-
-template<typename T>
-static void writeStates(std::ofstream &f, std::set<T> Set) {
-      // Integer state
-      uint stateSize = Set.size();
+static void writeStates(const struct ArgState& argState, std::ofstream &f) {
+      uint stateSize = argState.States.size();
       uint k = 0;
-      for (const auto &item : Set) {
-        f << item;
+      for (const auto &item : argState.States) {
+        // Write the correct type
+        switch(argState.Type){
+          case INT:
+            f << std::get<uint64_t>(item);
+            break;
+          case CHR:
+            f << std::get<char>(item);
+            break;
+          case STR:
+            f << std::get<std::string>(item);
+            break;
+          default:
+            PRINT_ERR("ArgState with 'NONE' type encountered");
+        }
         k++;
         addComma(f,k,stateSize);
       }
@@ -58,9 +68,7 @@ void DumpArgStates(std::unordered_map<std::string,std::vector<ArgState>> &functi
         f << "\n" << INDENT << INDENT << INDENT;
 
         // Only one of the state sets will contain values for an argument
-        writeStates(f, argState.IntStates);
-        writeStates(f, argState.ChrStates);
-        writeStates(f, argState.StrStates);
+        writeStates(argState, f);
         f << "\n" << INDENT << INDENT;
       }
 

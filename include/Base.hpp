@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <set>
+#include <variant>
 
 #define DEBUG_AST true
 
@@ -14,22 +15,21 @@ typedef unsigned uint;
 
 #define OUTPUT_FILE "/home/jonas/Repos/euf/clang-suffix/arg_states.json"
 
+enum StateType {
+  CHR, INT, STR, NONE
+};
 
 struct ArgState {
   // The ArgName will be empty for literals
   std::string ParamName;
   std::string ArgName;
   bool IsNonDet = false;
+  StateType Type = NONE;
+
 
   // We only need one set of states for each Arg
-  // A union{} cannot be used on complex types
-  // and a template type would cause issues since
-  // different versions would need to be in the same array
-  // This can be resolved though
-  //  https://stackoverflow.com/a/12009468/9033629
-  std::set<char> ChrStates;
-  std::set<uint64_t> IntStates;
-  std::set<std::string> StrStates;
+  // This solution with variant requires C++17
+  std::set<std::variant<char,uint64_t,std::string>> States;
 };
 
 #endif

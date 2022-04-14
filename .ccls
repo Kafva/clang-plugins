@@ -1,2 +1,3 @@
 clang
 -Iinclude
+-std=c++17

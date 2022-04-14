@@ -69,8 +69,8 @@ include_directories(SYSTEM "${LLVM_INCLUDE_DIRS};${CLANG_INCLUDE_DIRS}")
 #===============================================================================
 # 3. CLANG-TUTOR BUILD CONFIGURATION
 #===============================================================================
-# Use the same C++ standard as LLVM does
-set(CMAKE_CXX_STANDARD 14 CACHE STRING "")
+# Use the C++17 standard for support of std::variant (LLVM uses c++14)
+set(CMAKE_CXX_STANDARD 17 CACHE STRING "")
 
 # Build type
 if(NOT CMAKE_BUILD_TYPE)
@@ -98,7 +98,6 @@ if(${SUPPORTS_FVISIBILITY_INLINES_HIDDEN_FLAG} EQUAL "1")
 endif()
 
 # Set the build directories
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/bin")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/lib")
 
 #===============================================================================
@@ -106,7 +105,4 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/lib")
 # Doing this at the end so that all definitions and link/include paths are
 # available for the sub-projects.
 #===============================================================================
-add_subdirectory(test)
 add_subdirectory(lib)
-add_subdirectory(tools)
-add_subdirectory(HelloWorld)

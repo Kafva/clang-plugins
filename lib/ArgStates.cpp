@@ -291,8 +291,10 @@ run(const MatchFinder::MatchResult &result) {
         struct ArgState states = {
           .ParamName = paramName, 
           .ArgName = "",
-          .IntStates = std::set<uint64_t>()
+          .States = std::set<std::variant<char,uint64_t,std::string>>()
         }; 
+        states.Type = INT;
+
         this->FunctionStates.at(funcName).push_back(states);
         paramIndex = getIndexOfParam(*this, funcName, paramName);
       }
@@ -307,10 +309,10 @@ run(const MatchFinder::MatchResult &result) {
           == "ImplicitCastExpr"  && !alreadyNonDet) {
         // Insert the encountered state for the given param
         assert(paramIndex >= 0);
-        this->FunctionStates.at(funcName)[paramIndex].IntStates.insert(value);
+        this->FunctionStates.at(funcName)[paramIndex].States.insert(value);
 
-        auto size = this->FunctionStates.at(funcName)[paramIndex].IntStates.size();
-        PRINT_INFO("INT param (det) " << paramName  << " "<< size );
+        //auto size = this->FunctionStates.at(funcName)[paramIndex].States.size();
+        PRINT_INFO("INT param (det) " << paramName  << ": "<< value );
       } else {
         // If a  parameter should be considered nondet, we will set a flag
         // for the argument object (preventing further uneccessary analysis,

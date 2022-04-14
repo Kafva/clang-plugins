@@ -11,6 +11,7 @@ SRCS=lib/ArgStates.cpp lib/Util.cpp include/ArgStates.hpp include/Base.hpp \
 $(OUTPUT): $(BUILD_DIR)/Makefile $(SRCS)
 	make -C $(BUILD_DIR) -j$(NPROC) ArgStates
 
+#	-DCMAKE_CXX_FLAGS=-std=c++17
 $(BUILD_DIR)/Makefile:
 	mkdir -p $(BUILD_DIR)
 	cmake -DCT_Clang_INSTALL_DIR=$(CLANG_DIR) -S. -B $(BUILD_DIR)
