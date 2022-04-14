@@ -18,22 +18,16 @@ const char* LITERAL[] = {
   "CHR", "INT", "STR", "NONE"
 };
 
-//-----------------------------------------------------------------------------
-// Helper functions
-//-----------------------------------------------------------------------------
+int FirstPassMatcher::getIndexOfParam(const CallExpr* call, std::string paramName){
+  const auto fnc = call->getDirectCallee();
 
-//template<typename T>
-//void FirstPassMatcher:://util::dumpMatch(std::string type, T msg, int pass,
-//SourceManager* srcMgr, SourceLocation srcLocation) {
-//  #if DEBUG_AST
-//    const auto location = srcMgr->getFileLoc(srcLocation);
-//    llvm::errs() << "\033[35m" << pass << "\033[0m: " << type << "> " 
-//      << location.printToString(*srcMgr)
-//      << " " << msg
-//      << "\n";
-//  #endif
-//  return;
-//}
+  for (uint i = 0; i < fnc->getNumParams(); i++){
+      if (fnc->getParamDecl(i)->getName() == paramName){
+        return int(i);
+      }
+  }
+  return -1;
+}
 
 void FirstPassMatcher::getCallPath(DynTypedNode &parent, 
  std::string bindName, std::vector<DynTypedNode> &callPath){
@@ -55,16 +49,6 @@ void FirstPassMatcher::getCallPath(DynTypedNode &parent,
     }
 }
 
-int FirstPassMatcher::getIndexOfParam(const CallExpr* call, std::string paramName){
-  const auto fnc = call->getDirectCallee();
-
-  for (uint i = 0; i < fnc->getNumParams(); i++){
-      if (fnc->getParamDecl(i)->getName() == paramName){
-        return int(i);
-      }
-  }
-  return -1;
-}
 
 std::string FirstPassMatcher::getParamName(const CallExpr* matchedCall, 
  std::vector<DynTypedNode>& callPath, 
@@ -117,7 +101,6 @@ std::string FirstPassMatcher::getParamName(const CallExpr* matchedCall,
       const auto paramDecl  = funcDecl->getParamDecl(argumentIndex);
       paramName             = std::string(paramDecl->getName());
     } 
-
   }
 
   return paramName;
@@ -258,6 +241,19 @@ FirstPassASTConsumer(std::string symbolName): matchHandler() {
   this->finder.addMatcher(charMatcher,    &(this->matchHandler));
 }
 
+//bool FirstPassMatcher::isLiteralArgument(std::vector<DynTypedNode>& callPath,  ){
+//  const auto alreadyNonDet = this->functionStates[paramIndex].IsNonDet;
+//
+//  // Literal arguments are generally passed as:
+//  //  `-ImplicitCastExpr 0x5627407ed110 <col:13> 'unsigned long' <IntegralCast>
+//  //    `-IntegerLiteral 0x5627407ed0f0 <col:13> 'int' 8
+//  
+//  return callPath.size() == 2 && 
+//     callPath[0].getNodeKind().asStringRef() == "ImplicitCastExpr" &&
+//  }
+//
+//}
+
 void FirstPassMatcher::
 run(const MatchFinder::MatchResult &result) {
   // The idea:
@@ -311,7 +307,9 @@ run(const MatchFinder::MatchResult &result) {
     const auto name = anyArg->getStmtClassName();
     util::dumpMatch("ANY", name, matchId+1, this->srcMgr, anyArg->getEndLoc());
 
-    // Determine which parameter this argument has been given to
+    // 1. Traverse further down the experssion to find the leaf node
+
+    // 2. Determine which parameter the leaf node corresponds to
     auto callPath = std::vector<DynTypedNode>();
     const auto paramName = this->getParamName(call, callPath, "ANY"); 
     if (paramName.size()==0){
@@ -320,7 +318,17 @@ run(const MatchFinder::MatchResult &result) {
     } else {
       auto paramIndex = getIndexOfParam(call, paramName);
 
-      PRINT_INFO(paramName << " " << paramIndex );
+      // 3. Check if the leaf node is a literal AND the callpath only contains
+      // 'NOOPS' like ImplicitCastExpr and ParenExpr
+      // If any other expressions appear, mark this as nondet
+      //
+      // If its a plain literal reference, add it to the state space
+      // (TODO remove the other literal matchers)
+
+      // Check if the match mets the conditions for a det() match
+      // if not, set it as nondet
+
+      //PRINT_INFO(paramName << " " << paramIndex );
     }
 
   }
@@ -344,17 +352,17 @@ run(const MatchFinder::MatchResult &result) {
   else if (intLiteral) {
     const auto value =  intLiteral->getValue().getLimitedValue();
     util::dumpMatch(LITERAL[INT], value, matchId+1, this->srcMgr, intLiteral->getLocation());
-    handleLiteralMatch(value, INT, call);
+    this->handleLiteralMatch(value, INT, call);
   }
   else if (strLiteral) {
     const auto value =  std::string(strLiteral->getString());
     util::dumpMatch(LITERAL[STR], value, matchId+1, this->srcMgr, strLiteral->getEndLoc());
-    handleLiteralMatch(value, STR, call);
+    this->handleLiteralMatch(value, STR, call);
   }
   else if (chrLiteral) {
     const auto value =  chrLiteral->getValue();
     util::dumpMatch(LITERAL[CHR], value, matchId+1, this->srcMgr, chrLiteral->getLocation());
-    handleLiteralMatch(value, CHR, call);
+    this->handleLiteralMatch(value, CHR, call);
   }
 }
 
