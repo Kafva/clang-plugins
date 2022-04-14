@@ -66,6 +66,9 @@ public:
   void HandleTranslationUnit(ASTContext &ctx) override {
     this->Finder.matchAST(ctx);
   }
+
+  friend int getIndexOfParam(FirstPassMatcher& matcher, 
+      std::string funcName, std::string paramName);
   
   FirstPassMatcher MatchHandler;
 

@@ -44,13 +44,27 @@ static void getCallPath(ASTContext* ctx, BoundNodes::IDToNodeMap &nodeMap,
     }
 }
 
+int getIndexOfParam(FirstPassMatcher& matcher, 
+ std::string funcName, std::string paramName){
+
+  auto statesVectorSize = matcher.FunctionStates.at(funcName).size();
+
+  for (uint i = 0; i < statesVectorSize; i++){
+    if (matcher.FunctionStates.at(funcName)[i].ParamName == paramName){
+      return int(i);
+    }
+  }
+
+  return -1;
+}
+
 static std::string getParamName(const CallExpr* matchedCall, ASTContext* ctx, 
-  BoundNodes::IDToNodeMap &nodeMap, std::string bindName){
+  BoundNodes::IDToNodeMap &nodeMap, std::vector<DynTypedNode>& callPath, 
+  std::string bindName){
     std::string paramName = "";
     int  argumentIndex = -1;
     auto matchedNode = nodeMap.at(bindName);
     auto parents = ctx->getParents(matchedNode);
-    auto callPath = std::vector<DynTypedNode>();
     
     if (parents.size()>0) {
       // We assume .getParents() only returns one entry
@@ -221,7 +235,6 @@ run(const MatchFinder::MatchResult &result) {
     const auto *func       = result.Nodes.getNodeAs<FunctionDecl>("FNC");
 
     const auto *declRef    = result.Nodes.getNodeAs<DeclRefExpr>("REF");
-    const auto *memExpr    = result.Nodes.getNodeAs<MemberExpr>("MEM");
 
     const auto *intLiteral = result.Nodes.getNodeAs<IntegerLiteral>("INT");
     const auto *strLiteral = result.Nodes.getNodeAs<StringLiteral>("STR");
@@ -250,52 +263,62 @@ run(const MatchFinder::MatchResult &result) {
       //  * the argument name
       //  for every reference that we encounter in the 1st pass
       
-      auto paramName = getParamName(call, ctx, nodeMap, "REF"); 
+      auto callPath = std::vector<DynTypedNode>();
+      auto paramName = getParamName(call, ctx, nodeMap, callPath, "REF"); 
       PRINT_WARN("REF param arg " << paramName);
-    }
-    if (memExpr) {
-      const auto name = memExpr->getMemberNameInfo().getAsString();
-      dumpMatch("MEM", name, 1, srcMgr, memExpr->getEndLoc());
     }
     if (intLiteral) {
       const auto value =  intLiteral->getValue().getLimitedValue();
       dumpMatch("INT", value, 1, srcMgr, intLiteral->getLocation());
 
       // Determine which parameter this argument has been given to
-      auto paramName = getParamName(call, ctx, nodeMap, "INT"); 
-
+      auto callPath = std::vector<DynTypedNode>();
+      const auto paramName = getParamName(call, ctx, nodeMap, callPath, "INT"); 
+      
+      // Add an entry for the _function_ if necessary
       if (this->FunctionStates.count(funcName)==0) {
-        // Add an entry for the function if neccessary
         this->FunctionStates.insert(std::make_pair(
               funcName, 
               std::vector<ArgState>())
         );
       }
-
-      auto statesVectorSize = this->FunctionStates.at(funcName).size();
-      bool hasExistingState = false;
-
-      // Insert the encountered state for the given param
-      for (uint i = 0; i < statesVectorSize; i++){
-        if ( this->FunctionStates.at(funcName)[i].ParamName == paramName){
-          this->FunctionStates.at(funcName)[i].IntStates.insert(value);
-          hasExistingState = true;
-          break;
-        }
-      }
-
-      if (!hasExistingState){
-        // Add a new ArgState entry if neccessary
+      
+      auto paramIndex = getIndexOfParam(*this, funcName, paramName);
+      
+      // Add a new ArgState entry for the function if one
+      // does not exist already
+      if (paramIndex == -1) {
         struct ArgState states = {
           .ParamName = paramName, 
           .ArgName = "",
-          .IntStates = {value}
+          .IntStates = std::set<uint64_t>()
         }; 
         this->FunctionStates.at(funcName).push_back(states);
+        paramIndex = getIndexOfParam(*this, funcName, paramName);
       }
+      
+      // If the callPath only contains 2 elements:
+      //  <match>: [ implicitCast, callExpr ]
+      // Then we have a 'clean' value and not something akin to 'x + 7'
+      // For now, we only consider these cases as deterministic
+      const auto alreadyNonDet = this->FunctionStates.at(funcName)[paramIndex].IsNonDet;
 
-      auto size = this->FunctionStates.at(funcName)[0].IntStates.size();
-      PRINT_WARN("INT param " << paramName  << " "<< size );
+      if (callPath.size() >= 2 && callPath[callPath.size()-2].getNodeKind().asStringRef() \
+          == "ImplicitCastExpr"  && !alreadyNonDet) {
+        // Insert the encountered state for the given param
+        assert(paramIndex >= 0);
+        this->FunctionStates.at(funcName)[paramIndex].IntStates.insert(value);
+
+        auto size = this->FunctionStates.at(funcName)[paramIndex].IntStates.size();
+        PRINT_INFO("INT param (det) " << paramName  << " "<< size );
+      } else {
+        // If a  parameter should be considered nondet, we will set a flag
+        // for the argument object (preventing further uneccessary analysis,
+        // if other calls are made with det values does not matter if at least
+        // one call uses a nondet argument)
+        this->FunctionStates.at(funcName)[paramIndex].IsNonDet = true;
+        PRINT_INFO("INT param (nondet) " << paramName);
+      }
     }
     if (strLiteral) {
       const auto value =  strLiteral->getString();
@@ -305,10 +328,6 @@ run(const MatchFinder::MatchResult &result) {
       const auto value =  chrLiteral->getValue();
       dumpMatch("CHR", value, 1, srcMgr, chrLiteral->getLocation());
     }
-    //if (func){
-    //  const auto name = func->getName(); 
-    //  dumpMatch("FNC", name, 1, srcMgr, func->getEndLoc() );
-    //}
 }
 
 //-----------------------------------------------------------------------------

@@ -51,19 +51,23 @@ void DumpArgStates(std::unordered_map<std::string,std::vector<ArgState>> &functi
     uint j = 0;
     for (const auto &argState : funcMap.second) {
 
-      f << INDENT << INDENT << "\"" << argState.ParamName << "\": [\n"
-        << INDENT << INDENT << INDENT;
+      f << INDENT << INDENT << "\"" << argState.ParamName << "\": [";
 
-      // Only one of the state sets will contain values for an argument
-      writeStates(f, argState.IntStates);
-      writeStates(f, argState.ChrStates);
-      writeStates(f, argState.StrStates);
+      // Nondet arguments will have be given an empty list of states
+      if (!argState.IsNonDet){
+        f << "\n" << INDENT << INDENT << INDENT;
 
+        // Only one of the state sets will contain values for an argument
+        writeStates(f, argState.IntStates);
+        writeStates(f, argState.ChrStates);
+        writeStates(f, argState.StrStates);
+        f << "\n" << INDENT << INDENT;
+      }
+
+      f << "]";
       
-      f << "\n" << INDENT << INDENT << "]";
       addComma(f,++j,argCnt,true);
     }
-
 
     f << INDENT << "}";
     addComma(f,++i,functionCnt,true);
