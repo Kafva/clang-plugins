@@ -1,11 +1,4 @@
-#include <fstream>
-#include <iostream>
-#include <set>
-#include <unordered_map>
-
 #include "ArgStates.hpp"
-
-#define INDENT "  "
 
 static void addComma(std::ofstream &f, uint iter, uint size, bool newline=false){
     if (iter != size) {
@@ -34,19 +27,6 @@ static void writeStates(const struct ArgState& argState, std::ofstream &f) {
         k++;
         addComma(f,k,stateSize);
       }
-}
-
-std::string ArgStatesASTConsumer::getOutputPath(){
-    const auto outputDir = std::string(getenv(OUTPUT_DIR_ENV));
-    if (this->filename.size() >= 2 && outputDir.size() > 0) {
-      // <sym_name>_<tu>.json
-      auto outputPath = outputDir + "/" + this->symbolName + "_" + 
-                        this->filename.substr(0,this->filename.size()-2) +
-                        ".json";
-      return outputPath;
-    } else {
-      return std::string();
-    }
 }
 
 void ArgStatesASTConsumer::dumpArgStates(){
@@ -95,3 +75,17 @@ void ArgStatesASTConsumer::dumpArgStates(){
     << "}\n";
   f.close();
 }
+
+std::string ArgStatesASTConsumer::getOutputPath(){
+    const auto outputDir = std::string(getenv(OUTPUT_DIR_ENV));
+    if (this->filename.size() >= 2 && outputDir.size() > 0) {
+      // <sym_name>_<tu>.json
+      auto outputPath = outputDir + "/" + this->symbolName + "_" + 
+                        this->filename.substr(0,this->filename.size()-2) +
+                        ".json";
+      return outputPath;
+    } else {
+      return std::string();
+    }
+}
+

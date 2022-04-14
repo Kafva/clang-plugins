@@ -4,8 +4,8 @@ NPROC=$(shell echo $$((`nproc` - 1)))
 
 OUT_LIB=$(BUILD_DIR)/lib/libArgStates.so
 OUTPUT= $(OUT_LIB) $(OUT_EXEC)
-SRCS=lib/ArgStates.cpp lib/Util.cpp include/ArgStates.hpp include/Base.hpp \
-		 include/Util.hpp
+SRCS=lib/ArgStates.cpp lib/SecondPass.cpp lib/FirstPass.cpp lib/WriteJson.cpp \
+		 include/ArgStates.hpp include/Util.hpp include/Base.hpp
 .PHONY: clean run
 
 $(OUTPUT): $(BUILD_DIR)/Makefile $(SRCS)

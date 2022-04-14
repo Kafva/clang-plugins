@@ -8,7 +8,7 @@ set(CLANG_TUTOR_PLUGINS
     CodeRefactor
     AddSuffix
     ArgStates
-    )
+)
 
 set(LACommenter_SOURCES
   LACommenter.cpp)
@@ -30,7 +30,9 @@ set(AddSuffix_SOURCES
 
 set(ArgStates_SOURCES
   ArgStates.cpp
-  Util.cpp
+  FirstPass.cpp
+  SecondPass.cpp
+  WriteJson.cpp
 )
 
 # CONFIGURE THE PLUGIN LIBRARIES

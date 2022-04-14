@@ -1,17 +1,7 @@
 #ifndef ArgStates_H
 #define ArgStates_H
-
-#include "clang/AST/ASTConsumer.h"
-#include "clang/ASTMatchers/ASTMatchFinder.h"
-#include "clang/Rewrite/Core/Rewriter.h"
-#include "clang/Rewrite/Frontend/FixItRewriter.h"
-#include "clang/Tooling/CommonOptionsParser.h"
-
 #include "Base.hpp"
 
-using namespace clang;
-using namespace ast_matchers;
-  
 // The plugin receives ONE global symbol as input
 // Since we only need to look at changed entities (and not all
 // symbols as with clang-suffix) the overhead of doing a new
@@ -38,50 +28,43 @@ using namespace ast_matchers;
 //
 
 //-----------------------------------------------------------------------------
-// Argument state structures
-// We will need a seperate struct for passing values to the second pass
-//-----------------------------------------------------------------------------
-
-
-//-----------------------------------------------------------------------------
 // First pass:
 // In the first pass we will determine every call site to
 // a changed function and what arguments the invocations use
 //-----------------------------------------------------------------------------
-
-/// Callback matcher for the consumer
-/// The ::run() method defines what types of nodes we
-/// we want to match
 class FirstPassMatcher : public MatchFinder::MatchCallback {
 public:
   explicit FirstPassMatcher() {}
+  // Defines what types of nodes we we want to match
   void run(const MatchFinder::MatchResult &) override;
   void onEndOfTranslationUnit() override {};
 
   std::vector<ArgState> functionStates;
   std::string filename;
+private:
+  int getIndexOfParam(const CallExpr* call, std::string paramName);
+  void getCallPath(DynTypedNode &parent, std::string bindName, 
+    std::vector<DynTypedNode> &callPath);
+  void handleLiteralMatch(std::variant<char,uint64_t,std::string> value,
+    StateType matchedType, const CallExpr* call);
+  std::string getParamName(const CallExpr* matchedCall, 
+   std::vector<DynTypedNode>& callPath, 
+   const char* bindName);
 
+  SourceManager* srcMgr;
+  BoundNodes::IDToNodeMap nodeMap;
+
+  // Holds contxtual information about the AST, this allows
+  // us to determine e.g. the parents of a matched node
+  ASTContext* ctx;
 };
 
 class FirstPassASTConsumer : public ASTConsumer {
 public:
   FirstPassASTConsumer(std::string symbolName);
+  void HandleTranslationUnit(ASTContext &ctx) override ;
 
-  void HandleTranslationUnit(ASTContext &ctx) override {
-    this->finder.matchAST(ctx);
-  }
-
-  friend int getIndexOfParam(FirstPassMatcher& matcher, 
-      std::string funcName, std::string paramName);
-
-  friend void handleLiteralMatch(FirstPassMatcher& matcher, const ASTContext* ctx,
-      BoundNodes::IDToNodeMap& nodeMap,
-      std::variant<char,uint64_t,std::string> value, std::string funcName,
-      std::string bindName, CallExpr* call
-  );
-  
   FirstPassMatcher matchHandler;
-
 private:
   MatchFinder finder;
 };
@@ -105,10 +88,7 @@ public:
 class SecondPassASTConsumer : public ASTConsumer {
 public:
   SecondPassASTConsumer(std::string symbolName);
-
-  void HandleTranslationUnit(ASTContext &ctx) override {
-    this->finder.matchAST(ctx);
-  }
+  void HandleTranslationUnit(ASTContext &ctx) override ;
 
   SecondPassMatcher matchHandler;
 
@@ -122,32 +102,9 @@ private:
 //-----------------------------------------------------------------------------
 class ArgStatesASTConsumer : public ASTConsumer {
 public:
-  ArgStatesASTConsumer(std::string symbolName) {
-    this->symbolName = symbolName;
-  }
-  ~ArgStatesASTConsumer(){
-    this->dumpArgStates();
-
-  }
-
-  void HandleTranslationUnit(ASTContext &ctx) override {
-    
-    auto firstPass = std::make_unique<FirstPassASTConsumer>(this->symbolName);
-    firstPass->HandleTranslationUnit(ctx);
-
-    // The TU name is most easily read from within the match handler
-    this->filename = firstPass->matchHandler.filename;
-
-    auto secondPass = std::make_unique<SecondPassASTConsumer>(this->symbolName);
-
-    // Copy over the function states
-    // Note that the first pass only adds literals and the second adds declrefs
-    secondPass->matchHandler.functionStates = firstPass->matchHandler.functionStates;
-    // secondPass->HandleTranslationUnit(ctx);
-
-    // Overwrite the states
-    this->functionStates = secondPass->matchHandler.functionStates;
-  }
+  ArgStatesASTConsumer(std::string symbolName) ;
+  ~ArgStatesASTConsumer();
+  void HandleTranslationUnit(ASTContext &ctx) override;
 
 private:
   void dumpArgStates();
@@ -156,8 +113,5 @@ private:
   std::string filename;
   std::vector<ArgState> functionStates;
 };
-
-
-
 
 #endif

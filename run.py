@@ -87,3 +87,4 @@ with open(f"{TARGET_DIR}/compile_commands.json", mode = 'r', encoding='utf8') as
     with open(SYMBOL_LIST, mode = 'r', encoding='utf8') as f:
         for sym in f.readlines():
             call_arg_states(list(ccdb_args), SOURCE_SUB_DIR, sym.rstrip('\n') )
+            break
