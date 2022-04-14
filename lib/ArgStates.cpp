@@ -20,9 +20,28 @@
 using namespace clang;
 using namespace ast_matchers;
 
+// Indexed using the StateType enum to get the
+// corresponding string for each enum
+const char* LITERAL[] = {
+  "CHR", "INT", "STR", "NONE"
+};
+
 //-----------------------------------------------------------------------------
 // Helper functions
 //-----------------------------------------------------------------------------
+
+template<typename T>
+static void dumpMatch(std::string type, T msg, int pass,
+    SourceManager* srcMgr, SourceLocation srcLocation) {
+    #if DEBUG_AST
+      const auto location = srcMgr->getFileLoc(srcLocation);
+      llvm::errs() << "(\033[35m" << pass << "\033[0m) " << type << "> " 
+        << location.printToString(*srcMgr)
+        << " " << msg
+        << "\n";
+    #endif
+    return;
+}
 
 static void getCallPath(ASTContext* ctx, BoundNodes::IDToNodeMap &nodeMap, 
   DynTypedNode &parent, std::string bindName, std::vector<DynTypedNode> &callPath){
@@ -46,7 +65,6 @@ static void getCallPath(ASTContext* ctx, BoundNodes::IDToNodeMap &nodeMap,
 
 int getIndexOfParam(FirstPassMatcher& matcher, 
  std::string funcName, std::string paramName){
-
   auto statesVectorSize = matcher.FunctionStates.at(funcName).size();
 
   for (uint i = 0; i < statesVectorSize; i++){
@@ -59,67 +77,119 @@ int getIndexOfParam(FirstPassMatcher& matcher,
 }
 
 static std::string getParamName(const CallExpr* matchedCall, ASTContext* ctx, 
-  BoundNodes::IDToNodeMap &nodeMap, std::vector<DynTypedNode>& callPath, 
-  std::string bindName){
-    std::string paramName = "";
-    int  argumentIndex = -1;
-    auto matchedNode = nodeMap.at(bindName);
-    auto parents = ctx->getParents(matchedNode);
-    
-    if (parents.size()>0) {
-      // We assume .getParents() only returns one entry
-      auto parent = parents[0];
-      // Move up recursivly until we reach a call expression
-      // (we need to drop implicit casts etc.)
-      // Since we save all of the nodes in the path we traverse
-      // upwards, we can check which of the arguments our path corresponds to
-      getCallPath(ctx, nodeMap, parent, bindName, callPath);
+ BoundNodes::IDToNodeMap &nodeMap, std::vector<DynTypedNode>& callPath, 
+ const char* bindName){
+  std::string paramName = "";
+  int  argumentIndex = -1;
+  auto matchedNode = nodeMap.at(bindName);
+  auto parents = ctx->getParents(matchedNode);
+  
+  if (parents.size()>0) {
+    // We assume .getParents() only returns one entry
+    auto parent = parents[0];
+    // Move up recursivly until we reach a call expression
+    // (we need to drop implicit casts etc.)
+    // Since we save all of the nodes in the path we traverse
+    // upwards, we can check which of the arguments our path corresponds to
+    getCallPath(ctx, nodeMap, parent, bindName, callPath);
 
-      // We use .push_back() so the last item will be the actual call,
-      // we are intrested in the direct child from the call that is on the
-      // path towards our match, which will be at the penultimate position, 
-      // if the callPath only contains one item, then our matched node is 
-      // a direct child of the callexpr
-      auto ourPath = callPath.size() > 1 ? 
-        callPath[callPath.size()-2] : 
-        matchedNode; 
+    // We use .push_back() so the last item will be the actual call,
+    // we are intrested in the direct child from the call that is on the
+    // path towards our match, which will be at the penultimate position, 
+    // if the callPath only contains one item, then our matched node is 
+    // a direct child of the callexpr
+    auto ourPath = callPath.size() > 1 ? 
+      callPath[callPath.size()-2] : 
+      matchedNode; 
 
-      auto ourExpr = ourPath.get<Expr>();
+    auto ourExpr = ourPath.get<Expr>();
 
-      argumentIndex = 0;
-      for (auto call_arg : matchedCall->arguments()){
-        // Break once we find an argument in the matched call expression
-        // that matches the node we found traversing the AST upwards from
-        // our match
-        if (call_arg->getID(*ctx) == ourExpr->getID(*ctx) ) {
-          break;
-        }
-        argumentIndex++;
+    argumentIndex = 0;
+    for (auto call_arg : matchedCall->arguments()){
+      // Break once we find an argument in the matched call expression
+      // that matches the node we found traversing the AST upwards from
+      // our match
+      if (call_arg->getID(*ctx) == ourExpr->getID(*ctx) ) {
+        break;
       }
-
-      // No match found if the index reaches NumArgs
-      if (argumentIndex < int(matchedCall->getNumArgs()) ){
-        // Fetch the name of the parameter from the function declaration
-        const auto funcDecl   = matchedCall->getDirectCallee();
-        const auto paramDecl  = funcDecl->getParamDecl(argumentIndex);
-        paramName             = std::string(paramDecl->getName());
-      } 
+      argumentIndex++;
     }
 
-    return paramName;
+    // No match found if the index reaches NumArgs
+    if (argumentIndex < int(matchedCall->getNumArgs()) ){
+      // Fetch the name of the parameter from the function declaration
+      const auto funcDecl   = matchedCall->getDirectCallee();
+      const auto paramDecl  = funcDecl->getParamDecl(argumentIndex);
+      paramName             = std::string(paramDecl->getName());
+    } 
+  }
+
+  return paramName;
 }
 
-template<typename T>
-static void dumpMatch(std::string type, T msg, int pass,
-    SourceManager* srcMgr, SourceLocation srcLocation) {
-    #if DEBUG_AST
-      const auto location = srcMgr->getFileLoc(srcLocation);
-      llvm::errs() << "(\033[35m" << pass << "\033[0m) " << type << "> " 
-        << location.printToString(*srcMgr)
-        << " " << msg
-        << "\n";
-    #endif
-    return;
+void handleLiteralMatch(FirstPassMatcher& matcher, ASTContext* ctx,
+BoundNodes::IDToNodeMap& nodeMap,
+std::variant<char,uint64_t,std::string> value, std::string funcName,
+StateType matchedType, const CallExpr* call
+){
+  // Determine which parameter this argument has been given to
+  auto callPath = std::vector<DynTypedNode>();
+  const auto paramName = getParamName(call, ctx, nodeMap, callPath, LITERAL[matchedType]); 
+  
+  // Add an entry for the _function_ if necessary
+  if (matcher.FunctionStates.count(funcName)==0) {
+    matcher.FunctionStates.insert(std::make_pair(
+          funcName, 
+          std::vector<ArgState>())
+    );
+  }
+  
+  auto paramIndex = getIndexOfParam(matcher, funcName, paramName);
+  
+  // Add a new ArgState entry for the function if one
+  // does not exist already
+  if (paramIndex == -1) {
+    struct ArgState states = {
+      .ParamName = paramName, 
+      .ArgName = "",
+      .States = std::set<std::variant<char,uint64_t,std::string>>()
+    }; 
+    states.Type = matchedType;
+
+    matcher.FunctionStates.at(funcName).push_back(states);
+    paramIndex = getIndexOfParam(matcher, funcName, paramName);
+  }
+  
+  // If the callPath only contains 2 elements:
+  //  <match>: [ implicitCast, callExpr ]
+  // Then we have a 'clean' value and not something akin to 'x + 7'
+  // If we have #define statements akin to
+  //  #define XML_FALSE ((XML_Bool)0)
+  //  We get:
+  //
+  //   `-ParenExpr 0x564907af8a08 <lib/expat.h:48:19, col:31> 'XML_Bool':'unsigned char'
+  //     `-CStyleCastExpr 0x564907af89e0 <col:20, col:30> 'XML_Bool':'unsigned char' <IntegralCast>
+  //       `-IntegerLiteral 0x564907af89b0 <col:30> 'int' 0
+  //  It would be opimtal if we could whitelist all patterns that are effectivly just NOOPs
+  //  wrapping a literal
+  // All other cases are considered nodet for now
+  const auto alreadyNonDet = matcher.FunctionStates.at(funcName)[paramIndex].IsNonDet;
+
+  if (callPath.size() >= 2 && callPath[callPath.size()-2].getNodeKind().asStringRef() \
+      == "ImplicitCastExpr"  && !alreadyNonDet) {
+    // Insert the encountered state for the given param
+    assert(paramIndex >= 0);
+    matcher.FunctionStates.at(funcName)[paramIndex].States.insert(value);
+
+    PRINT_INFO(LITERAL[matchedType] << " param (det) " << paramName  << ": ");
+  } else {
+    // If a  parameter should be considered nondet, we will set a flag
+    // for the argument object (preventing further uneccessary analysis,
+    // if other calls are made with det values does not matter if at least
+    // one call uses a nondet argument)
+    matcher.FunctionStates.at(funcName)[paramIndex].IsNonDet = true;
+    PRINT_INFO(LITERAL[matchedType] << " param (nondet) " << paramName);
+  }
 }
 
 //-----------------------------------------------------------------------------
@@ -189,21 +259,20 @@ FirstPassASTConsumer(std::vector<std::string>& Names): MatchHandler() {
   // i.e. we match 'c' in  'a->b->c'.
   // There are a lot of edge cases to consider for this, see 
   //  lib/xmlparse.c:3166 poolStoreString()
-  const auto memMatcher = memberExpr(
-    unless(hasAncestor(memberExpr())),
-    isArgumentOfCall
-  ).bind("MEM");
+  //const auto memMatcher = memberExpr(
+  //  unless(hasAncestor(memberExpr())),
+  //  isArgumentOfCall
+  //).bind("MEM");
 
   // We need the literals to be direct descendents (barring the implicitCastExpr)
   // otherwise they could be part of larger experssions, e.g. 'foo + 6'
   // For now, any literal that is not a direct descendent of the call will be
   // considered an undet() value
-  const auto intMatcher = integerLiteral(isArgumentOfCall).bind("INT");
-  const auto stringMatcher = stringLiteral(isArgumentOfCall).bind("STR");
-  const auto charMatcher = characterLiteral(isArgumentOfCall).bind("CHR");
+  const auto intMatcher = integerLiteral(isArgumentOfCall).bind(LITERAL[INT]);
+  const auto stringMatcher = stringLiteral(isArgumentOfCall).bind(LITERAL[STR]);
+  const auto charMatcher = characterLiteral(isArgumentOfCall).bind(LITERAL[CHR]);
 
   this->Finder.addMatcher(declRefMatcher, &(this->MatchHandler));
-  this->Finder.addMatcher(memMatcher,     &(this->MatchHandler));
   this->Finder.addMatcher(intMatcher,     &(this->MatchHandler));
   this->Finder.addMatcher(stringMatcher,  &(this->MatchHandler));
   this->Finder.addMatcher(charMatcher,    &(this->MatchHandler));
@@ -211,125 +280,76 @@ FirstPassASTConsumer(std::vector<std::string>& Names): MatchHandler() {
 
 void FirstPassMatcher::
 run(const MatchFinder::MatchResult &result) {
-    // The idea:
-    // Determine what types of arguments are passed to the function
-    // For literal and NULL arguments, we add their value to the state space
-    // For declrefs, we save the names of each argument and query for all references
-    // to them before the call (in the same enclosing function) in the next pass
-    // The key cases we want to detect are
-    //   1. When literals are passed
-    //   2. When an unintialized (null) variable is passed
-    //   3. When a variable is assigned a literal value (and remains unchanged)
-    // We skip considering struct fields (MemberExpr) for now
+  // The idea:
+  // Determine what types of arguments are passed to the function
+  // For literal and NULL arguments, we add their value to the state space
+  // For declrefs, we save the names of each argument and query for all references
+  // to them before the call (in the same enclosing function) in the next pass
+  // The key cases we want to detect are
+  //   1. When literals are passed
+  //   2. When an unintialized (null) variable is passed
+  //   3. When a variable is assigned a literal value (and remains unchanged)
+  // We skip considering struct fields (MemberExpr) for now
 
-    // Holds information on the actual source code
-    const auto srcMgr = result.SourceManager;
+  // Holds information on the actual source code
+  const auto srcMgr = result.SourceManager;
 
-    // Holds contxtual information about the AST, this allows
-    // us to determine e.g. the parents of a matched node
-    const auto ctx = result.Context;
+  // Holds contxtual information about the AST, this allows
+  // us to determine e.g. the parents of a matched node
+  auto ctx = result.Context;
 
-    auto nodeMap = result.Nodes.getMap();
+  auto nodeMap = result.Nodes.getMap();
 
-    const auto *call       = result.Nodes.getNodeAs<CallExpr>("CALL");
-    const auto *func       = result.Nodes.getNodeAs<FunctionDecl>("FNC");
+  const auto *call       = result.Nodes.getNodeAs<CallExpr>("CALL");
+  const auto *func       = result.Nodes.getNodeAs<FunctionDecl>("FNC");
 
-    const auto *declRef    = result.Nodes.getNodeAs<DeclRefExpr>("REF");
+  const auto *declRef    = result.Nodes.getNodeAs<DeclRefExpr>("REF");
 
-    const auto *intLiteral = result.Nodes.getNodeAs<IntegerLiteral>("INT");
-    const auto *strLiteral = result.Nodes.getNodeAs<StringLiteral>("STR");
-    const auto *chrLiteral = result.Nodes.getNodeAs<CharacterLiteral>("CHR");
+  const auto *intLiteral = result.Nodes.getNodeAs<IntegerLiteral>(LITERAL[INT]);
+  const auto *strLiteral = result.Nodes.getNodeAs<StringLiteral>(LITERAL[STR]);
+  const auto *chrLiteral = result.Nodes.getNodeAs<CharacterLiteral>(LITERAL[CHR]);
+  
+  // To correlate the arguments that we match agianst to parameters in the function call
+  // we need to traverse the call experssion and pair the arguments with the Parms from the FNC
+
+  std::string funcName;    
+  if (!func){
+    PRINT_ERR("No FunctionDecl matched");
+    return;
+  } else {
+    funcName = std::string(func->getName());
+  }
+
+  if (declRef) {
+    // This includes a match for the actual function token (index -1)
+    const auto name = declRef->getDecl()->getName();
+    dumpMatch("REF", name, 1, srcMgr, declRef->getEndLoc());
     
-    // To correlate the arguments that we match agianst to parameters in the function call
-    // we need to traverse the call experssion and pair the arguments with the Parms from the FNC
-    //const int  numArgs = call->getNumArgs();
-
-    std::string funcName;    
-    if (!func){
-      PRINT_ERR("No FunctionDecl matched");
-      return;
-    } else {
-      funcName = std::string(func->getName());
-    }
-
-    if (declRef) {
-      // This includes a match for the actual function token (index -1)
-      const auto name = declRef->getDecl()->getName();
-      dumpMatch("REF", name, 1, srcMgr, declRef->getEndLoc());
-      
-      // During the second pass we must be able to identify 
-      //  * the enclosing function
-      //  * the callee
-      //  * the argument name
-      //  for every reference that we encounter in the 1st pass
-      
-      auto callPath = std::vector<DynTypedNode>();
-      auto paramName = getParamName(call, ctx, nodeMap, callPath, "REF"); 
-      PRINT_WARN("REF param arg " << paramName);
-    }
-    if (intLiteral) {
-      const auto value =  intLiteral->getValue().getLimitedValue();
-      dumpMatch("INT", value, 1, srcMgr, intLiteral->getLocation());
-
-      // Determine which parameter this argument has been given to
-      auto callPath = std::vector<DynTypedNode>();
-      const auto paramName = getParamName(call, ctx, nodeMap, callPath, "INT"); 
-      
-      // Add an entry for the _function_ if necessary
-      if (this->FunctionStates.count(funcName)==0) {
-        this->FunctionStates.insert(std::make_pair(
-              funcName, 
-              std::vector<ArgState>())
-        );
-      }
-      
-      auto paramIndex = getIndexOfParam(*this, funcName, paramName);
-      
-      // Add a new ArgState entry for the function if one
-      // does not exist already
-      if (paramIndex == -1) {
-        struct ArgState states = {
-          .ParamName = paramName, 
-          .ArgName = "",
-          .States = std::set<std::variant<char,uint64_t,std::string>>()
-        }; 
-        states.Type = INT;
-
-        this->FunctionStates.at(funcName).push_back(states);
-        paramIndex = getIndexOfParam(*this, funcName, paramName);
-      }
-      
-      // If the callPath only contains 2 elements:
-      //  <match>: [ implicitCast, callExpr ]
-      // Then we have a 'clean' value and not something akin to 'x + 7'
-      // For now, we only consider these cases as deterministic
-      const auto alreadyNonDet = this->FunctionStates.at(funcName)[paramIndex].IsNonDet;
-
-      if (callPath.size() >= 2 && callPath[callPath.size()-2].getNodeKind().asStringRef() \
-          == "ImplicitCastExpr"  && !alreadyNonDet) {
-        // Insert the encountered state for the given param
-        assert(paramIndex >= 0);
-        this->FunctionStates.at(funcName)[paramIndex].States.insert(value);
-
-        //auto size = this->FunctionStates.at(funcName)[paramIndex].States.size();
-        PRINT_INFO("INT param (det) " << paramName  << ": "<< value );
-      } else {
-        // If a  parameter should be considered nondet, we will set a flag
-        // for the argument object (preventing further uneccessary analysis,
-        // if other calls are made with det values does not matter if at least
-        // one call uses a nondet argument)
-        this->FunctionStates.at(funcName)[paramIndex].IsNonDet = true;
-        PRINT_INFO("INT param (nondet) " << paramName);
-      }
-    }
-    if (strLiteral) {
-      const auto value =  strLiteral->getString();
-      dumpMatch("STR", value, 1, srcMgr, strLiteral->getEndLoc());
-    }
-    if (chrLiteral) {
-      const auto value =  chrLiteral->getValue();
-      dumpMatch("CHR", value, 1, srcMgr, chrLiteral->getLocation());
-    }
+    // During the second pass we must be able to identify 
+    //  * the enclosing function
+    //  * the callee
+    //  * the argument name
+    //  for every reference that we encounter in the 1st pass
+    
+    auto callPath = std::vector<DynTypedNode>();
+    auto paramName = getParamName(call, ctx, nodeMap, callPath, "REF"); 
+    // PRINT_INFO("REF param arg " << paramName);
+  }
+  if (intLiteral) {
+    const auto value =  intLiteral->getValue().getLimitedValue();
+    dumpMatch(LITERAL[INT], value, 1, srcMgr, intLiteral->getLocation());
+    handleLiteralMatch(*this, ctx, nodeMap, value, funcName, INT, call);
+  }
+  if (strLiteral) {
+    const auto value =  std::string(strLiteral->getString());
+    dumpMatch(LITERAL[STR], value, 1, srcMgr, strLiteral->getEndLoc());
+    handleLiteralMatch(*this, ctx, nodeMap, value, funcName, STR, call);
+  }
+  if (chrLiteral) {
+    const auto value =  chrLiteral->getValue();
+    dumpMatch(LITERAL[CHR], value, 1, srcMgr, chrLiteral->getLocation());
+    handleLiteralMatch(*this, ctx, nodeMap, value, funcName, CHR, call);
+  }
 }
 
 //-----------------------------------------------------------------------------
@@ -379,8 +399,6 @@ run(const MatchFinder::MatchResult &result) {
       dumpMatch("REF", name, 2, srcMgr, declRef->getEndLoc());
     }
 }
-
-
 
 //-----------------------------------------------------------------------------
 // FrontendAction and Registration

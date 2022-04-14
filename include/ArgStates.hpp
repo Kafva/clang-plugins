@@ -69,6 +69,12 @@ public:
 
   friend int getIndexOfParam(FirstPassMatcher& matcher, 
       std::string funcName, std::string paramName);
+
+  friend void handleLiteralMatch(FirstPassMatcher& matcher, const ASTContext* ctx,
+      BoundNodes::IDToNodeMap& nodeMap,
+      std::variant<char,uint64_t,std::string> value, std::string funcName,
+      std::string bindName, CallExpr* call
+  );
   
   FirstPassMatcher MatchHandler;
 
@@ -139,5 +145,8 @@ private:
   std::unordered_map<std::string,std::vector<ArgState>> FunctionStates;
 
 };
+
+
+
 
 #endif
