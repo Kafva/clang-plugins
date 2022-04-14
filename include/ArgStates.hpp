@@ -12,7 +12,11 @@
 using namespace clang;
 using namespace ast_matchers;
   
-// The plugin receives a list of global symbols as input.
+// The plugin receives ONE global symbol as input
+// Since we only need to look at changed entities (and not all
+// symbols as with clang-suffix) the overhead of doing a new
+// run per name is not going to be notable a problem
+//
 // We want to determine what arguments are used to call each of these
 // functions. Our record of this data will be on the form
 //
@@ -54,17 +58,17 @@ public:
   void run(const MatchFinder::MatchResult &) override;
   void onEndOfTranslationUnit() override {};
 
-  // Maps function names to lists of ArgState structs
-  std::unordered_map<std::string,std::vector<ArgState>> FunctionStates;
+  std::vector<ArgState> functionStates;
+  std::string filename;
 
 };
 
 class FirstPassASTConsumer : public ASTConsumer {
 public:
-  FirstPassASTConsumer(std::vector<std::string>& Names);
+  FirstPassASTConsumer(std::string symbolName);
 
   void HandleTranslationUnit(ASTContext &ctx) override {
-    this->Finder.matchAST(ctx);
+    this->finder.matchAST(ctx);
   }
 
   friend int getIndexOfParam(FirstPassMatcher& matcher, 
@@ -76,10 +80,10 @@ public:
       std::string bindName, CallExpr* call
   );
   
-  FirstPassMatcher MatchHandler;
+  FirstPassMatcher matchHandler;
 
 private:
-  MatchFinder Finder;
+  MatchFinder finder;
 };
 
 
@@ -95,22 +99,21 @@ public:
   void run(const MatchFinder::MatchResult &) override;
   void onEndOfTranslationUnit() override {};
   
-  std::unordered_map<std::string,std::vector<ArgState>> FunctionStates;
-
+  std::vector<ArgState> functionStates;
 };
 
 class SecondPassASTConsumer : public ASTConsumer {
 public:
-  SecondPassASTConsumer(std::vector<std::string>& Names);
+  SecondPassASTConsumer(std::string symbolName);
 
   void HandleTranslationUnit(ASTContext &ctx) override {
-    this->Finder.matchAST(ctx);
+    this->finder.matchAST(ctx);
   }
 
-  SecondPassMatcher MatchHandler;
+  SecondPassMatcher matchHandler;
 
 private:
-  MatchFinder Finder;
+  MatchFinder finder;
 };
 
 //-----------------------------------------------------------------------------
@@ -119,31 +122,39 @@ private:
 //-----------------------------------------------------------------------------
 class ArgStatesASTConsumer : public ASTConsumer {
 public:
-  ArgStatesASTConsumer(std::vector<std::string>& Names) {
-    this->Names = Names;
+  ArgStatesASTConsumer(std::string symbolName) {
+    this->symbolName = symbolName;
   }
-  ~ArgStatesASTConsumer();
+  ~ArgStatesASTConsumer(){
+    this->dumpArgStates();
+
+  }
 
   void HandleTranslationUnit(ASTContext &ctx) override {
     
-    auto firstPass = std::make_unique<FirstPassASTConsumer>(this->Names);
+    auto firstPass = std::make_unique<FirstPassASTConsumer>(this->symbolName);
     firstPass->HandleTranslationUnit(ctx);
 
-    auto secondPass = std::make_unique<SecondPassASTConsumer>(this->Names);
+    // The TU name is most easily read from within the match handler
+    this->filename = firstPass->matchHandler.filename;
+
+    auto secondPass = std::make_unique<SecondPassASTConsumer>(this->symbolName);
 
     // Copy over the function states
     // Note that the first pass only adds literals and the second adds declrefs
-    secondPass->MatchHandler.FunctionStates = firstPass->MatchHandler.FunctionStates;
+    secondPass->matchHandler.functionStates = firstPass->matchHandler.functionStates;
     // secondPass->HandleTranslationUnit(ctx);
 
     // Overwrite the states
-    this->FunctionStates = secondPass->MatchHandler.FunctionStates;
+    this->functionStates = secondPass->matchHandler.functionStates;
   }
 
 private:
-  std::vector<std::string> Names;
-  std::unordered_map<std::string,std::vector<ArgState>> FunctionStates;
-
+  void dumpArgStates();
+  std::string getOutputPath();
+  std::string symbolName;
+  std::string filename;
+  std::vector<ArgState> functionStates;
 };
 
 

@@ -4,7 +4,6 @@
 // USAGE: TBD
 //==============================================================================
 #include "ArgStates.hpp"
-#include "Util.hpp"
 
 #include "clang/AST/Expr.h"
 #include "clang/AST/ExprCXX.h"
@@ -63,12 +62,11 @@ static void getCallPath(ASTContext* ctx, BoundNodes::IDToNodeMap &nodeMap,
     }
 }
 
-int getIndexOfParam(FirstPassMatcher& matcher, 
- std::string funcName, std::string paramName){
-  auto statesVectorSize = matcher.FunctionStates.at(funcName).size();
+static int getIndexOfParam(FirstPassMatcher& matcher, std::string paramName){
+  auto statesVectorSize = matcher.functionStates.size();
 
   for (uint i = 0; i < statesVectorSize; i++){
-    if (matcher.FunctionStates.at(funcName)[i].ParamName == paramName){
+    if (matcher.functionStates[i].ParamName == paramName){
       return int(i);
     }
   }
@@ -129,22 +127,14 @@ static std::string getParamName(const CallExpr* matchedCall, ASTContext* ctx,
 
 void handleLiteralMatch(FirstPassMatcher& matcher, ASTContext* ctx,
 BoundNodes::IDToNodeMap& nodeMap,
-std::variant<char,uint64_t,std::string> value, std::string funcName,
+std::variant<char,uint64_t,std::string> value,
 StateType matchedType, const CallExpr* call
 ){
   // Determine which parameter this argument has been given to
   auto callPath = std::vector<DynTypedNode>();
   const auto paramName = getParamName(call, ctx, nodeMap, callPath, LITERAL[matchedType]); 
   
-  // Add an entry for the _function_ if necessary
-  if (matcher.FunctionStates.count(funcName)==0) {
-    matcher.FunctionStates.insert(std::make_pair(
-          funcName, 
-          std::vector<ArgState>())
-    );
-  }
-  
-  auto paramIndex = getIndexOfParam(matcher, funcName, paramName);
+  auto paramIndex = getIndexOfParam(matcher, paramName);
   
   // Add a new ArgState entry for the function if one
   // does not exist already
@@ -156,8 +146,8 @@ StateType matchedType, const CallExpr* call
     }; 
     states.Type = matchedType;
 
-    matcher.FunctionStates.at(funcName).push_back(states);
-    paramIndex = getIndexOfParam(matcher, funcName, paramName);
+    matcher.functionStates.push_back(states);
+    paramIndex = getIndexOfParam(matcher, paramName);
   }
   
   // If the callPath only contains 2 elements:
@@ -170,16 +160,17 @@ StateType matchedType, const CallExpr* call
   //   `-ParenExpr 0x564907af8a08 <lib/expat.h:48:19, col:31> 'XML_Bool':'unsigned char'
   //     `-CStyleCastExpr 0x564907af89e0 <col:20, col:30> 'XML_Bool':'unsigned char' <IntegralCast>
   //       `-IntegerLiteral 0x564907af89b0 <col:30> 'int' 0
+  //
   //  It would be opimtal if we could whitelist all patterns that are effectivly just NOOPs
   //  wrapping a literal
   // All other cases are considered nodet for now
-  const auto alreadyNonDet = matcher.FunctionStates.at(funcName)[paramIndex].IsNonDet;
+  const auto alreadyNonDet = matcher.functionStates[paramIndex].IsNonDet;
 
   if (callPath.size() >= 2 && callPath[callPath.size()-2].getNodeKind().asStringRef() \
       == "ImplicitCastExpr"  && !alreadyNonDet) {
     // Insert the encountered state for the given param
     assert(paramIndex >= 0);
-    matcher.FunctionStates.at(funcName)[paramIndex].States.insert(value);
+    matcher.functionStates[paramIndex].States.insert(value);
 
     PRINT_INFO(LITERAL[matchedType] << " param (det) " << paramName  << ": ");
   } else {
@@ -187,7 +178,7 @@ StateType matchedType, const CallExpr* call
     // for the argument object (preventing further uneccessary analysis,
     // if other calls are made with det values does not matter if at least
     // one call uses a nondet argument)
-    matcher.FunctionStates.at(funcName)[paramIndex].IsNonDet = true;
+    matcher.functionStates[paramIndex].IsNonDet = true;
     PRINT_INFO(LITERAL[matchedType] << " param (nondet) " << paramName);
   }
 }
@@ -199,7 +190,7 @@ StateType matchedType, const CallExpr* call
 
 /// Specifies the node patterns that we want to analyze further in ::run()
 FirstPassASTConsumer::
-FirstPassASTConsumer(std::vector<std::string>& Names): MatchHandler() {
+FirstPassASTConsumer(std::string symbolName): matchHandler() {
   // PRINT_WARN("First pass!");
 
   // We want to match agianst all variable refernces which are later passed
@@ -239,7 +230,7 @@ FirstPassASTConsumer(std::vector<std::string>& Names): MatchHandler() {
   // Testcase: XML_SetBase in xmlwf/xmlfile.c
   const auto isArgumentOfCall = hasAncestor(
       callExpr(callee(
-          functionDecl(hasName(Names[0])
+          functionDecl(hasName(symbolName)
           ).bind("FNC")
           ),
       unless(hasParent(compoundStmt(hasParent(functionDecl()))))
@@ -272,10 +263,10 @@ FirstPassASTConsumer(std::vector<std::string>& Names): MatchHandler() {
   const auto stringMatcher = stringLiteral(isArgumentOfCall).bind(LITERAL[STR]);
   const auto charMatcher = characterLiteral(isArgumentOfCall).bind(LITERAL[CHR]);
 
-  this->Finder.addMatcher(declRefMatcher, &(this->MatchHandler));
-  this->Finder.addMatcher(intMatcher,     &(this->MatchHandler));
-  this->Finder.addMatcher(stringMatcher,  &(this->MatchHandler));
-  this->Finder.addMatcher(charMatcher,    &(this->MatchHandler));
+  this->finder.addMatcher(declRefMatcher, &(this->matchHandler));
+  this->finder.addMatcher(intMatcher,     &(this->matchHandler));
+  this->finder.addMatcher(stringMatcher,  &(this->matchHandler));
+  this->finder.addMatcher(charMatcher,    &(this->matchHandler));
 }
 
 void FirstPassMatcher::
@@ -312,12 +303,16 @@ run(const MatchFinder::MatchResult &result) {
   // To correlate the arguments that we match agianst to parameters in the function call
   // we need to traverse the call experssion and pair the arguments with the Parms from the FNC
 
-  std::string funcName;    
   if (!func){
     PRINT_ERR("No FunctionDecl matched");
     return;
-  } else {
-    funcName = std::string(func->getName());
+  }   
+  
+  if (call) {
+    // Extract the filename (basename) of the current TU so that
+    // the outer consumer knows what filename to use for the output file
+    auto filepath = srcMgr->getFilename(call->getEndLoc()); 
+    this->filename = filepath.substr(filepath.find_last_of("/\\") + 1);
   }
 
   if (declRef) {
@@ -338,17 +333,17 @@ run(const MatchFinder::MatchResult &result) {
   if (intLiteral) {
     const auto value =  intLiteral->getValue().getLimitedValue();
     dumpMatch(LITERAL[INT], value, 1, srcMgr, intLiteral->getLocation());
-    handleLiteralMatch(*this, ctx, nodeMap, value, funcName, INT, call);
+    handleLiteralMatch(*this, ctx, nodeMap, value, INT, call);
   }
   if (strLiteral) {
     const auto value =  std::string(strLiteral->getString());
     dumpMatch(LITERAL[STR], value, 1, srcMgr, strLiteral->getEndLoc());
-    handleLiteralMatch(*this, ctx, nodeMap, value, funcName, STR, call);
+    handleLiteralMatch(*this, ctx, nodeMap, value, STR, call);
   }
   if (chrLiteral) {
     const auto value =  chrLiteral->getValue();
     dumpMatch(LITERAL[CHR], value, 1, srcMgr, chrLiteral->getLocation());
-    handleLiteralMatch(*this, ctx, nodeMap, value, funcName, CHR, call);
+    handleLiteralMatch(*this, ctx, nodeMap, value, CHR, call);
   }
 }
 
@@ -358,12 +353,12 @@ run(const MatchFinder::MatchResult &result) {
 //-----------------------------------------------------------------------------
 
 SecondPassASTConsumer::
-SecondPassASTConsumer(std::vector<std::string>& Names) : MatchHandler() {
+SecondPassASTConsumer(std::string symbolName) : matchHandler() {
   // PRINT_WARN("Second pass!");
 
   const auto isArgumentOfCall = hasAncestor(
       callExpr(callee(
-          functionDecl(hasName(Names[0]))
+          functionDecl(hasName(symbolName))
             .bind("FNC")
           ),
       unless(hasParent(compoundStmt(hasParent(functionDecl()))))
@@ -379,7 +374,7 @@ SecondPassASTConsumer(std::vector<std::string>& Names) : MatchHandler() {
   ).bind("REF");
 
 
-  this->Finder.addMatcher(declRefMatcher, &(this->MatchHandler));
+  this->finder.addMatcher(declRefMatcher, &(this->matchHandler));
 }
 
 void SecondPassMatcher::
@@ -404,26 +399,20 @@ run(const MatchFinder::MatchResult &result) {
 // FrontendAction and Registration
 //-----------------------------------------------------------------------------
 
-ArgStatesASTConsumer::~ArgStatesASTConsumer(){
-    // The dumping to disk is per TU
-    DumpArgStates(this->FunctionStates, OUTPUT_FILE);
-}
-
 class ArgStatesAddPluginAction : public PluginASTAction {
 public:
   bool ParseArgs(const CompilerInstance &CI,
                  const std::vector<std::string> &args) override {
     DiagnosticsEngine &diagnostics = CI.getDiagnostics();
-
+ 
     uint namesDiagID = diagnostics.getCustomDiagID(
-      DiagnosticsEngine::Error, "missing -names-file"
+      DiagnosticsEngine::Error, "missing -symbol-name"
     );
 
     for (size_t i = 0, size = args.size(); i != size; ++i) {
-      if (args[i] == "-names-file") {
+      if (args[i] == "-symbol-name") {
          if (parseArg(diagnostics, namesDiagID, size, args, i)){
-             auto NamesFile = args[++i];
-             this->readNamesFromFile(NamesFile);
+             this->symbolName = args[++i];
          } else {
              return false;
          }
@@ -441,23 +430,10 @@ public:
   //  https://clang.llvm.org/docs/RAVFrontendAction.html
   std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI, 
   StringRef file) override {
-    return std::make_unique<ArgStatesASTConsumer>(this->Names);
+    return std::make_unique<ArgStatesASTConsumer>(this->symbolName);
   }
 
 private:
-  void readNamesFromFile(std::string filename) {
-    std::ifstream file(filename);
-
-    if (file.is_open()) {
-      std::string line;
-
-      while (std::getline(file,line)) {
-        this->Names.push_back(line);
-      }
-      file.close();
-    }
-  }
-
   bool parseArg(DiagnosticsEngine &diagnostics, uint diagID, int size,
       const std::vector<std::string> &args, int i) {
 
@@ -473,7 +449,7 @@ private:
   }
 
   Rewriter RewriterForArgStates;
-  std::vector<std::string> Names;
+  std::string symbolName;
 };
 
 static FrontendPluginRegistry::Add<ArgStatesAddPluginAction>

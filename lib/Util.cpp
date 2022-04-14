@@ -36,52 +36,62 @@ static void writeStates(const struct ArgState& argState, std::ofstream &f) {
       }
 }
 
-void DumpArgStates(std::unordered_map<std::string,std::vector<ArgState>> &functionStates,
- std::string filename){
-  // We will dump the FunctionStates as JSON for the current TU only and join the
+std::string ArgStatesASTConsumer::getOutputPath(){
+    const auto outputDir = std::string(getenv(OUTPUT_DIR_ENV));
+    if (this->filename.size() >= 2 && outputDir.size() > 0) {
+      // <sym_name>_<tu>.json
+      auto outputPath = outputDir + "/" + this->symbolName + "_" + 
+                        this->filename.substr(0,this->filename.size()-2) +
+                        ".json";
+      return outputPath;
+    } else {
+      return std::string();
+    }
+}
+
+void ArgStatesASTConsumer::dumpArgStates(){
+  // We dump the functionStates as JSON for the current TU only and join the
   // values externally in Python
-  if (functionStates.size() == 0){
+  if (this->functionStates.size() == 0){
     return;
   }
-  PRINT_WARN("Time to write states");
+  auto filename = this->getOutputPath();
+
+  if(filename.size()==0) { 
+    PRINT_ERR("No output filename configured");
+    return; 
+  } else {
+    PRINT_INFO("Writing output to: " << filename);
+  }
 
   std::ofstream f;
   f.open(filename, std::ofstream::out|std::ofstream::trunc);
 
-  f << "{\n";
+  f << "{\n"
+    << INDENT << "\"" << symbolName << "\": {\n";
 
-  // Iterate over key:values in the map
-  uint functionCnt = functionStates.size();
+
+  uint argCnt = this->functionStates.size();
   uint i = 0;
-  for (const auto &funcMap : functionStates) {
-    f << INDENT << "\"" << funcMap.first << "\": {\n";
+  for (const auto &argState : this->functionStates) {
 
+    f << INDENT << INDENT << "\"" << argState.ParamName << "\": [";
 
-    uint argCnt = funcMap.second.size();
-    uint j = 0;
-    for (const auto &argState : funcMap.second) {
+    // Nondet arguments will have been given an empty list of states
+    if (!argState.IsNonDet){
+      f << "\n" << INDENT << INDENT << INDENT;
 
-      f << INDENT << INDENT << "\"" << argState.ParamName << "\": [";
-
-      // Nondet arguments will have be given an empty list of states
-      if (!argState.IsNonDet){
-        f << "\n" << INDENT << INDENT << INDENT;
-
-        // Only one of the state sets will contain values for an argument
-        writeStates(argState, f);
-        f << "\n" << INDENT << INDENT;
-      }
-
-      f << "]";
-      
-      addComma(f,++j,argCnt,true);
+      // Only one of the state sets will contain values for an argument
+      writeStates(argState, f);
+      f << "\n" << INDENT << INDENT;
     }
 
-    f << INDENT << "}";
-    addComma(f,++i,functionCnt,true);
+    f << "]";
+    
+    addComma(f,++i,argCnt,true);
   }
-  
-  f << "}\n";
+
+  f << INDENT << "}\n"
+    << "}\n";
   f.close();
 }
-

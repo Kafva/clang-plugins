@@ -17,8 +17,9 @@ $(BUILD_DIR)/Makefile:
 	cmake -DCT_Clang_INSTALL_DIR=$(CLANG_DIR) -S. -B $(BUILD_DIR)
 
 run: $(OUTPUT)
+	rm -f states/*
 	./run.py
-	cat arg_states.json
+	bat states/*.json
 
 clean:
 	rm -rf $(BUILD_DIR)
