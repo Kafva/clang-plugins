@@ -1,7 +1,5 @@
 #ifndef ArgStates_H
 #define ArgStates_H
-#include "Base.hpp"
-
 // The plugin receives ONE global symbol as input
 // Since we only need to look at changed entities (and not all
 // symbols as with clang-suffix) the overhead of doing a new
@@ -26,6 +24,8 @@
 //
 //  https://clang.llvm.org/docs/LibASTMatchersTutorial.html
 //
+
+#include "Base.hpp"
 
 //-----------------------------------------------------------------------------
 // First pass:

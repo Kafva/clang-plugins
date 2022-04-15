@@ -21,9 +21,12 @@
 #define DEBUG_ENV "DEBUG_AST"
 #define INDENT "  "
 
-#define PRINT_ERR(msg)  if (getenv(DEBUG_ENV)!=NULL) llvm::errs() << "\033[31m!>\033[0m " << msg << "\n"
-#define PRINT_WARN(msg) if (getenv(DEBUG_ENV)!=NULL) llvm::errs() << "\033[33m!>\033[0m " << msg << "\n"
-#define PRINT_INFO(msg) if (getenv(DEBUG_ENV)!=NULL) llvm::errs() << "\033[34m!>\033[0m " << msg << "\n"
+#define PRINT_ERR(msg)  if (getenv(DEBUG_ENV)!=NULL) llvm::errs() << \
+                            "\033[31m!>\033[0m " << msg << "\n"
+#define PRINT_WARN(msg) if (getenv(DEBUG_ENV)!=NULL) llvm::errs() << \
+                            "\033[33m!>\033[0m " << msg << "\n"
+#define PRINT_INFO(msg) if (getenv(DEBUG_ENV)!=NULL) llvm::errs() << \
+                            "\033[34m!>\033[0m " << msg << "\n"
 typedef unsigned uint;
 typedef std::variant<unsigned int,uint64_t,std::string> variants;
 

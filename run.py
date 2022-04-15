@@ -7,6 +7,7 @@ SYMBOL_NAME="XML_ExternalEntityParserCreate"
 SOURCE_SUB_DIR=f"{TARGET_DIR}/xmlwf"
 #SOURCE_SUB_DIR=f"{TARGET_DIR}/lib"
 
+
 SYMBOL_LIST="/home/jonas/Repos/euf/tests/expected/libexpat_90ed_ef31_change_set.txt"
 OUTDIR="/home/jonas/Repos/euf/clang-suffix/states"
 
@@ -90,4 +91,3 @@ with open(f"{TARGET_DIR}/compile_commands.json", mode = 'r', encoding='utf8') as
             sym = sym.rstrip('\n')
             print(f"===> {sym} <===")
             call_arg_states(list(ccdb_args), SOURCE_SUB_DIR, sym)
-            break

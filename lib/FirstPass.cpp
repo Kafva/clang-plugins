@@ -1,17 +1,6 @@
 #include "ArgStates.hpp"
 #include "Util.hpp"
 
-//#include "clang/AST/Expr.h"
-//#include "clang/AST/ExprCXX.h"
-//#include "clang/AST/RecursiveASTVisitor.h"
-//#include "clang/ASTMatchers/ASTMatchers.h"
-//#include "clang/Frontend/CompilerInstance.h"
-//#include "clang/Frontend/FrontendPluginRegistry.h"
-//#include "clang/Tooling/Refactoring/Rename/RenamingAction.h"
-//#include "llvm/Support/raw_ostream.h"
-//#include <fstream>
-//#include <iostream>
-
 // Indexed using the StateType enum to get the
 // corresponding string for each enum
 const char* LITERAL[] = {
@@ -44,7 +33,6 @@ void FirstPassMatcher::getCallPath(DynTypedNode &parent,
       }
     }
 }
-
 
 std::string FirstPassMatcher::getParamName(const CallExpr* matchedCall, 
  std::vector<DynTypedNode>& callPath, 
@@ -118,48 +106,64 @@ StateType matchedType, const CallExpr* call, const Expr* matchedExpr){
   const auto argState         = this->argumentStates.at(paramName);
   const auto firtstParentKind = callPath[0].getNodeKind().asStringRef();
   
-  // We remove the ids for every match that corresponds to a det() case 
-  // At the final write-to-disk stage, the params with an empty ids[] set
-  // are those that can be considered det()
- 
   bool matchIsDet = false;
-
+ 
   if (argState.isNonDet){
     // Already identified as nondet()
   }
   else if (callPath.size() == 1 && firtstParentKind == "CallExpr") {
-    // 1. If the callPath only contains 1 element we have an exact call, e.g.
+    // If the callPath only contains 1 element we have an exact call, e.g.
     //  foo(int x) -> foo(1)
     matchIsDet = true;
   }
-  else if (callPath.size() == 2 && firtstParentKind == "ImplicitCastExpr") {
-    // 2. If the callPath only contains 2 elements:
+  else if (callPath.size() >= 2){
+    // If we have #define statements akin to
+    //  #define XML_FALSE ((XML_Bool)0)
+    //  We get:
+    //   `-ParenExpr 'XML_Bool':'unsigned char'
+    //     `-CStyleCastExpr 'XML_Bool':'unsigned char' <IntegralCast>
+    //       `-IntegerLiteral 'int' 0
+    //
+    // We can exclude all types of 'NOOP' casts and '()' like this one 
+    // from an expression using built-in functionality in clang and 
+    // then check if the simplified top argument
+    // corresponds to the integral type that we matched to handle these cases
+    //
+    // If the callPath only contains 2 elements:
     //  <match>: [ implicitCast, callExpr ]
     // Then we have a 'clean' value besides an implicit cast, e.g.
     //  foo(MY_INT x) -> foo(1)
-    matchIsDet = true;
+    //  This case is also covered by this check
+    const auto topArg = callPath[callPath.size()-2].get<Expr>();
+    const auto simplifiedTopArg = topArg->IgnoreParenNoopCasts(*ctx) \
+                                  ->IgnoreImplicit()->IgnoreCasts();
+    const auto type = simplifiedTopArg->getStmtClassName();
+    if (NodeTypes.count(type) > 0 &&  NodeTypes.at(type) == matchedType){
+        matchIsDet = true;
+    }
   }
-  // 3. If we have #define statements akin to
-  //  #define XML_FALSE ((XML_Bool)0)
-  //  We get:
-  //   `-ParenExpr 0x564907af8a08 <lib/expat.h:48:19, col:31> 'XML_Bool':'unsigned char'
-  //     `-CStyleCastExpr 0x564907af89e0 <col:20, col:30> 'XML_Bool':'unsigned char' <IntegralCast>
-  //       `-IntegerLiteral 0x564907af89b0 <col:30> 'int' 0
-  //
 
   if (matchIsDet){
     this->argumentStates.at(paramName).states.insert(value);
 
-    // We should always erase one element with this operation
-    assert(this->argumentStates.at(paramName).ids.erase(matchedExpr->getID(*ctx)) == 1);
+    // We remove the ids for every match that corresponds to a det() case 
+    // At the final write-to-disk stage, the params with an empty ids[] set
+    // are those that can be considered det()
+    // Exactly one element should be erased with this operation
+    assert(
+      this->argumentStates.at(paramName).ids.erase(matchedExpr->getID(*ctx)) 
+      == 1
+    );
 
-    PRINT_INFO(LITERAL[matchedType] << "> " << paramName << " (det): " << matchedExpr->getID(*ctx) \
-        << " (" << this->argumentStates.at(paramName).ids.size() << ")" );
+    PRINT_INFO(LITERAL[matchedType] << "> " << paramName << " (det): "
+        << matchedExpr->getID(*ctx) << " (" 
+        << this->argumentStates.at(paramName).ids.size() << ")" );
   } else {
     // Unmatched base case: nondet()
     this->argumentStates.at(paramName).isNonDet = true;
-    PRINT_INFO(LITERAL[matchedType] << "> " << paramName << " (nondet): " << matchedExpr->getID(*ctx) \
-        << " (" << this->argumentStates.at(paramName).ids.size() << ")" );
+    PRINT_INFO(LITERAL[matchedType] << "> " << paramName << " (nondet): " 
+        << matchedExpr->getID(*ctx) << " (" 
+        << this->argumentStates.at(paramName).ids.size() << ")" );
   }
 }
 
