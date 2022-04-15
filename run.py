@@ -54,6 +54,7 @@ def call_arg_states(ccdb_args: list[str], cwd: str, symbol_name: str) -> None:
     ccdb_filtered  = filter(lambda a: not re.match(blacklist, a), ccdb_args)
     script_env = os.environ.copy()
     script_env.update({ "ARG_STATES_OUT_DIR": OUTDIR })
+    script_env.update({ "DEBUG_AST": "1" })
 
 
     # We assume that the isystem-flags are the same for all source files in a directory

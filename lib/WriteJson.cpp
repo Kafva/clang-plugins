@@ -57,8 +57,10 @@ void ArgStatesASTConsumer::dumpArgStates(){
 
     f << INDENT << INDENT << "\"" << argStatePair.first << "\": [";
 
-    // Nondet arguments will have been given an empty list of states
-    if (!argStatePair.second.isNonDet){
+    // nondet() arguments will have been given an empty list of states
+    // det() arguments need to have an empty ids[] set, otherwise an invocation
+    // matched by ANY still exists that is nondet() for the argument
+    if (!argStatePair.second.isNonDet && argStatePair.second.ids.size() == 0){
       f << "\n" << INDENT << INDENT << INDENT;
 
       // Only one of the state sets will contain values for an argument

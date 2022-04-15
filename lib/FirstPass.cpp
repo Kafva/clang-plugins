@@ -18,24 +18,12 @@ const char* LITERAL[] = {
   "CHR", "INT", "STR", "NONE"
 };
 
-
 const std::map<std::string,StateType> NodeTypes {
   {"CharacterLiteral", CHR},
   {"IntegerLiteral", INT},
   {"StringLiteral", STR},
   {"DeclRefExpr", NONE}
 };
-
-int FirstPassMatcher::getIndexOfParam(const CallExpr* call, std::string paramName){
-  const auto fnc = call->getDirectCallee();
-
-  for (uint i = 0; i < fnc->getNumParams(); i++){
-      if (fnc->getParamDecl(i)->getName() == paramName){
-        return int(i);
-      }
-  }
-  return -1;
-}
 
 void FirstPassMatcher::getCallPath(DynTypedNode &parent, 
  std::string bindName, std::vector<DynTypedNode> &callPath){
@@ -115,25 +103,18 @@ std::string FirstPassMatcher::getParamName(const CallExpr* matchedCall,
 }
 
 void FirstPassMatcher::handleLiteralMatch(std::variant<char,uint64_t,std::string> value,
-StateType matchedType, const CallExpr* call){
-  // Determine which parameter this argument has been given to
+StateType matchedType, const CallExpr* call, const Expr* matchedExpr){
+  // Determine which parameter this argument corresponds to
   auto callPath = std::vector<DynTypedNode>();
   const auto paramName = this->getParamName(call, callPath, LITERAL[matchedType]); 
   
-  auto paramIndex = getIndexOfParam(call, paramName);
-  
-  // Add a new ArgState entry for the function if one
-  // does not exist already
-  if (paramIndex == -1) {
-    struct ArgState states = {
-      .states = std::set<std::variant<char,uint64_t,std::string>>()
-    }; 
-    states.type = matchedType;
+  // An argState entry should already exist from the ANY-matching stage for each param
+  assert(this->argumentStates.count(paramName) > 0 && 
+      this->argumentStates.at(paramName).type == matchedType);
 
-    //this->argumentStates.push_back(states);
-    paramIndex = getIndexOfParam(call, paramName);
-  }
-  
+  // The callPath should always contain at least two elements (CallExpr -> ImplicitCastExpr)
+  assert(callPath.size() >= 2);
+
   // If the callPath only contains 2 elements:
   //  <match>: [ implicitCast, callExpr ]
   // Then we have a 'clean' value and not something akin to 'x + 7'
@@ -148,23 +129,29 @@ StateType matchedType, const CallExpr* call){
   //  It would be opimtal if we could whitelist all patterns that are effectivly just NOOPs
   //  wrapping a literal
   // All other cases are considered nodet for now
-  //const auto alreadyNonDet = this->argumentStates[paramIndex].isNonDet;
+  const auto argState = this->argumentStates.at(paramName);
+  const auto firtstParentKind = callPath[callPath.size()-2].getNodeKind().asStringRef();
+  
+  // We remove the ids for every match that corresponds to a det() case 
+  // At the final write-to-disk stage, the params with an empty ids[] set
+  // are those that can be considered det()
 
-  //if (callPath.size() >= 2 && callPath[callPath.size()-2].getNodeKind().asStringRef() \
-  //    == "ImplicitCastExpr"  && !alreadyNonDet) {
-  //  // Insert the encountered state for the given param
-  //  assert(paramIndex >= 0);
-  //  this->argumentStates[paramIndex].states.insert(value);
+  if (callPath.size() == 2 && firtstParentKind == "ImplicitCastExpr" && !argState.isNonDet) {
+    // Is directly passed literal, e.g. foo(1,2);
+    this->argumentStates.at(paramName).states.insert(value);
 
-  //  PRINT_INFO(LITERAL[matchedType] << " param (det) " << paramName  << ": ");
-  //} else {
-  //  // If a  parameter should be considered nondet, we will set a flag
-  //  // for the argument object (preventing further uneccessary analysis,
-  //  // if other calls are made with det values does not matter if at least
-  //  // one call uses a nondet argument)
-  //  this->argumentStates[paramIndex].isNonDet = true;
-  //  PRINT_INFO(LITERAL[matchedType] << " param (nondet) " << paramName);
-  //}
+    // We should always erase one element with this operation
+    assert(this->argumentStates.at(paramName).ids.erase(matchedExpr->getID(*ctx)) == 1);
+
+    PRINT_INFO(LITERAL[matchedType] << "> " << paramName << " (det): " << matchedExpr->getID(*ctx) \
+        << " (" << this->argumentStates.at(paramName).ids.size() << ")" );
+
+  } else {
+    // Unmatched base case: nondet()
+    this->argumentStates.at(paramName).isNonDet = true;
+    PRINT_INFO(LITERAL[matchedType] << "> " << paramName << " (nondet): " << matchedExpr->getID(*ctx) \
+        << " (" << this->argumentStates.at(paramName).ids.size() << ")" );
+  }
 }
 
 //-----------------------------------------------------------------------------
@@ -233,13 +220,15 @@ FirstPassASTConsumer(std::string symbolName): matchHandler() {
   // then the parameter is nondet().
   const auto anyMatcher     = expr(isArgumentOfCall).bind("ANY");
 
-  // Matchers are executed in the order that they are added to the finder
-  // By executing the ANY matcher first we start by enumerating all possible
-  // arguments to the provided function
+  // Matchers are executed in the _order that they are added to the finder_
+  // This does not infer that the anyMatcher will go through ALL nodes before
+  // any matches are handled by the other matchers, but it does mean that
+  // any node visited by the other matchers will always first have been 
+  // visited by the anyMatcher.
   //
-  // If an argument not on the 'whitelist' is encountered at this stage
-  // we can set it as nondet() without further analysis
-  this->finder.addMatcher(anyMatcher, &(this->matchHandler));
+  // With this in mind we can always assume that an argState entry exists
+  // for a literal match since the anyMatcher will have created one during its visit
+  this->finder.addMatcher(anyMatcher,     &(this->matchHandler));
 
   this->finder.addMatcher(declRefMatcher, &(this->matchHandler));
   this->finder.addMatcher(intMatcher,     &(this->matchHandler));
@@ -261,10 +250,6 @@ run(const MatchFinder::MatchResult &result) {
   //   3. When a variable is assigned a literal value (and remains unchanged)
   // We skip considering struct fields (MemberExpr) for now
   
-  auto matchId=0;
-  //auto matchId = rand() % 100000;
-  //if (matchId%2==1) matchId += 1;
-
   // Holds information on the actual source code
   this->srcMgr = result.SourceManager;
 
@@ -297,11 +282,14 @@ run(const MatchFinder::MatchResult &result) {
   this->filename = filepath.substr(filepath.find_last_of("/\\") + 1);
 
 
+  /***** First matching stage ****/
+  // Creates a set of all node IDs that need to be inspected for
+  // each argument
   if (anyArg) {
     const auto name = anyArg->getStmtClassName();
-    util::dumpMatch("ANY", name, matchId+1, this->srcMgr, anyArg->getEndLoc());
+    util::dumpMatch("ANY", name, 1, this->srcMgr, anyArg->getEndLoc());
 
-    // 1. Determine which parameter the leaf node corresponds to
+    // Determine which parameter the leaf node corresponds to
     auto callPath = std::vector<DynTypedNode>();
     const auto paramName = this->getParamName(call, callPath, "ANY"); 
 
@@ -310,15 +298,14 @@ run(const MatchFinder::MatchResult &result) {
       return;
     }
 
-    // 2. Save the nodeID of the leaf stmt for this match
     if (paramName.size()==0){
-      PRINT_ERR("Failed to determine param for: ");
+      PRINT_ERR("ANY> Failed to determine param for: ");
       anyArg->dumpColor();
     } else {
       auto leafStmt = util::getFirstLeaf(anyArg, ctx);
 
       if (this->argumentStates.count(paramName) == 0) {
-        // Add a new ArgState entry does not exist already
+        // Add a new ArgState entry if one does not exist already
         struct ArgState argState = {
           .ids = std::set<uint64_t>(),
           .states = std::set<std::variant<char,uint64_t,std::string>>()
@@ -331,41 +318,22 @@ run(const MatchFinder::MatchResult &result) {
       if (NodeTypes.find(className) != NodeTypes.end()){
         this->argumentStates.at(paramName).type = NodeTypes.at(className);
       } else {
-        PRINT_ERR("Unhandled leaf node type: " << className);
+        PRINT_ERR("ANY> Unhandled leaf node type: " << className);
       }
-
-      PRINT_INFO(paramName << ": " << leafStmt->getID(*ctx) << " " << className);
-
+      
+      // Save the nodeID of the leaf stmt for this match
       uint64_t stmtID = leafStmt->getID(*ctx);
       this->argumentStates.at(paramName).ids.insert(stmtID);
+
+      PRINT_INFO("ANY> " << paramName << " "<< className << ": " << leafStmt->getID(*ctx) \
+          << " (" << this->argumentStates.at(paramName).ids.size() << ")" );
     }
-
-
-
-
-    // A ::Tree object is needed to properly find children...
-    //  https://clang.llvm.org/doxygen/classclang_1_1syntax_1_1Tree.html#details
-
-
-    //auto exprNode = this->nodeMap.at("ANY");
-    //for (auto child : anyArg->children() ){
-    //  
-    //  // If the final child ID matches that of a literal (that we match later)
-    //  // we can remove it, if the list of matched IDs for a specific argument
-    //  // is non-empty at the end of matching => nondet
-    //  PRINT_WARN( child->getID(*ctx) );
-    //}
-    
-
-
   }
-
-
-  if(true){} //TODO
+  /***** Second matching stage ****/
   else if (declRef) {
     // This includes a match for the actual function token (index -1)
     const auto name = declRef->getDecl()->getName();
-    util::dumpMatch("REF", name, matchId+1, this->srcMgr, declRef->getEndLoc());
+    util::dumpMatch("REF", name, 1, this->srcMgr, declRef->getEndLoc());
     
     // During the second pass we must be able to identify 
     //  * the enclosing function
@@ -375,21 +343,39 @@ run(const MatchFinder::MatchResult &result) {
     
     auto callPath = std::vector<DynTypedNode>();
     auto paramName = this->getParamName(call, callPath, "REF"); 
+
+    if (paramName == fnc->getName()){
+      return;
+    }
+
+    // Set all declrefs as nondet()
+    if (this->argumentStates.count(paramName) == 0) {
+      // Add a new ArgState entry if one does not exist already
+      struct ArgState argState = {
+        .isNonDet = true,
+        .ids = std::set<uint64_t>(),
+        .states = std::set<std::variant<char,uint64_t,std::string>>(),
+      }; 
+      this->argumentStates.insert(std::make_pair(paramName, argState));
+    } else {
+      this->argumentStates.at(paramName).isNonDet = true;
+    }
+
   }
   else if (intLiteral) {
     const auto value =  intLiteral->getValue().getLimitedValue();
-    util::dumpMatch(LITERAL[INT], value, matchId+1, this->srcMgr, intLiteral->getLocation());
-    this->handleLiteralMatch(value, INT, call);
+    util::dumpMatch(LITERAL[INT], value, 1, this->srcMgr, intLiteral->getLocation());
+    this->handleLiteralMatch(value, INT, call, intLiteral);
   }
   else if (strLiteral) {
     const auto value =  std::string(strLiteral->getString());
-    util::dumpMatch(LITERAL[STR], value, matchId+1, this->srcMgr, strLiteral->getEndLoc());
-    this->handleLiteralMatch(value, STR, call);
+    util::dumpMatch(LITERAL[STR], value, 1, this->srcMgr, strLiteral->getEndLoc());
+    this->handleLiteralMatch(value, STR, call, strLiteral);
   }
   else if (chrLiteral) {
     const auto value =  chrLiteral->getValue();
-    util::dumpMatch(LITERAL[CHR], value, matchId+1, this->srcMgr, chrLiteral->getLocation());
-    this->handleLiteralMatch(value, CHR, call);
+    util::dumpMatch(LITERAL[CHR], value, 1, this->srcMgr, chrLiteral->getLocation());
+    this->handleLiteralMatch(value, CHR, call, chrLiteral);
   }
 }
 

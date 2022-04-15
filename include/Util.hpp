@@ -16,13 +16,13 @@ namespace util {
   template<typename T>
   void dumpMatch(std::string type, T msg, int pass, SourceManager* srcMgr, 
   SourceLocation srcLocation) {
-    #if DEBUG_AST
+    if(getenv(DEBUG_ENV)!=NULL) {
       const auto location = srcMgr->getFileLoc(srcLocation);
       llvm::errs() << "\033[35m" << pass << "\033[0m: " << type << "> " 
         << location.printToString(*srcMgr)
         << " " << msg
         << "\n";
-    #endif
+    }
     return;
   }
 }
