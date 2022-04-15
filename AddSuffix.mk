@@ -5,9 +5,8 @@ NPROC=$(shell echo $$((`nproc` - 1)))
 
 # The executables are configured in tools/*.cpp, we do not need 
 # this for our use-case
-OUT_EXEC=$(BUILD_DIR)/bin/ct-add-suffix
 OUT_LIB=$(BUILD_DIR)/lib/libAddSuffix.so
-OUTPUT_FILES= $(OUT_LIB) $(OUT_EXEC)
+OUTPUT_FILES= $(OUT_LIB)
 
 # Unlike `clang-rename`, this plugin only acts on one file at a time,
 # allowing us to run several instances in parallel
@@ -25,11 +24,11 @@ OUTPUT_FILES= $(OUT_LIB) $(OUT_EXEC)
 #INCLUDE_DIR=$(TARGET_DIR)/src
 
 # 'rehash' is used inside a macro
-#REPLACE_FILE=/home/jonas/Repos/euf/clang-suffix/test/onig_tests.txt
+#REPLACE_FILE=/home/jonas/Repos/euf/clang-plugins/test/onig_tests.txt
 
 #TARGET_DIR=~/Repos/oniguruma
 #INCLUDE_DIR=$(TARGET_DIR)/src
-#INPUT_FILE=~/Repos/euf/clang-suffix/test/macro.c
+#INPUT_FILE=~/Repos/euf/clang-plugins/test/macro.c
 #REPLACE_FILE=~/Repos/euf/tests/data/oni_rename.txt
 #EXPAND=false
 

@@ -2,7 +2,7 @@
 #define ArgStates_H
 // The plugin receives ONE global symbol as input
 // Since we only need to look at changed entities (and not all
-// symbols as with clang-suffix) the overhead of doing a new
+// symbols as with AddSuffix) the overhead of doing a new
 // run per name is not going to be notable a problem
 //
 // We want to determine what arguments are used to call each of these

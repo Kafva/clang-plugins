@@ -2,15 +2,13 @@
 import json, re, subprocess, sys, os
 
 TARGET_DIR="/home/jonas/.cache/euf/libexpat-90ed5777/expat"
-PLUGIN="/home/jonas/Repos/euf/clang-suffix/build/lib/libArgStates.so"
+PLUGIN="/home/jonas/Repos/euf/clang-plugins/build/lib/libArgStates.so"
 SYMBOL_NAME="XML_ExternalEntityParserCreate"
 SOURCE_SUB_DIR=f"{TARGET_DIR}/xmlwf"
 #SOURCE_SUB_DIR=f"{TARGET_DIR}/lib"
 
-
 SYMBOL_LIST="/home/jonas/Repos/euf/tests/expected/libexpat_90ed_ef31_change_set.txt"
-OUTDIR="/home/jonas/Repos/euf/clang-suffix/states"
-
+OUTDIR="/home/jonas/Repos/euf/clang-plugins/states"
 
 # 1. Split up the dep dir into subdirs (including top level)
 # 2. Iterate over CHANGED_FUNCTIONS and call for each name ONCE per directory
@@ -72,7 +70,7 @@ def call_arg_states(ccdb_args: list[str], cwd: str, symbol_name: str) -> None:
 # We will run the plugin once PER changed name PER source directory
 # If we try to run if once per changed named the include paths become inconsisitent between TUs
 # Running the plugin for all names (and once per file) is a bad idea as seen with the uber hack macros
-# in clang-suffix.
+# in clang-plugins.
 #
 # For this to work we need to create a union of all the ccmd flags for each directory
 INPUT_FILES = set()
