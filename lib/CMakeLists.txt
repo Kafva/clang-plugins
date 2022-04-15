@@ -1,29 +1,9 @@
 # THE LIST OF PLUGINS AND THE CORRESPONDING SOURCE FILES
 # ======================================================
-set(CLANG_TUTOR_PLUGINS
-    LACommenter
-    CodeStyleChecker
-    Obfuscator
-    UnusedForLoopVar
-    CodeRefactor
+set(PLUGINS
     AddSuffix
     ArgStates
 )
-
-set(LACommenter_SOURCES
-  LACommenter.cpp)
-
-set(CodeStyleChecker_SOURCES
-  CodeStyleChecker.cpp)
-
-set(Obfuscator_SOURCES
-  Obfuscator.cpp)
-
-set(UnusedForLoopVar_SOURCES
-  UnusedForLoopVar.cpp)
-
-set(CodeRefactor_SOURCES
-  CodeRefactor.cpp)
 
 set(AddSuffix_SOURCES
   AddSuffix.cpp)
@@ -38,7 +18,7 @@ set(ArgStates_SOURCES
 
 # CONFIGURE THE PLUGIN LIBRARIES
 # ==============================
-foreach( plugin ${CLANG_TUTOR_PLUGINS} )
+foreach( plugin ${PLUGINS} )
     # Create a library corresponding to 'plugin'
     add_library(
       ${plugin}
