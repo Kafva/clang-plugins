@@ -102,7 +102,7 @@ std::string FirstPassMatcher::getParamName(const CallExpr* matchedCall,
   return paramName;
 }
 
-void FirstPassMatcher::handleLiteralMatch(std::variant<char,uint64_t,std::string> value,
+void FirstPassMatcher::handleLiteralMatch(variants value,
 StateType matchedType, const CallExpr* call, const Expr* matchedExpr){
   // Determine which parameter this argument corresponds to
   auto callPath = std::vector<DynTypedNode>();
@@ -112,32 +112,42 @@ StateType matchedType, const CallExpr* call, const Expr* matchedExpr){
   assert(this->argumentStates.count(paramName) > 0 && 
       this->argumentStates.at(paramName).type == matchedType);
 
-  // The callPath should always contain at least two elements (CallExpr -> ImplicitCastExpr)
-  assert(callPath.size() >= 2);
+  // The callPath always contains at least one element: <match> [ callexpr ]
+  assert(callPath.size() >= 1);
 
-  // If the callPath only contains 2 elements:
-  //  <match>: [ implicitCast, callExpr ]
-  // Then we have a 'clean' value and not something akin to 'x + 7'
-  // If we have #define statements akin to
-  //  #define XML_FALSE ((XML_Bool)0)
-  //  We get:
-  //
-  //   `-ParenExpr 0x564907af8a08 <lib/expat.h:48:19, col:31> 'XML_Bool':'unsigned char'
-  //     `-CStyleCastExpr 0x564907af89e0 <col:20, col:30> 'XML_Bool':'unsigned char' <IntegralCast>
-  //       `-IntegerLiteral 0x564907af89b0 <col:30> 'int' 0
-  //
-  //  It would be opimtal if we could whitelist all patterns that are effectivly just NOOPs
-  //  wrapping a literal
-  // All other cases are considered nodet for now
-  const auto argState = this->argumentStates.at(paramName);
-  const auto firtstParentKind = callPath[callPath.size()-2].getNodeKind().asStringRef();
+  const auto argState         = this->argumentStates.at(paramName);
+  const auto firtstParentKind = callPath[0].getNodeKind().asStringRef();
   
   // We remove the ids for every match that corresponds to a det() case 
   // At the final write-to-disk stage, the params with an empty ids[] set
   // are those that can be considered det()
+ 
+  bool matchIsDet = false;
 
-  if (callPath.size() == 2 && firtstParentKind == "ImplicitCastExpr" && !argState.isNonDet) {
-    // Is directly passed literal, e.g. foo(1,2);
+  if (argState.isNonDet){
+    // Already identified as nondet()
+  }
+  else if (callPath.size() == 1 && firtstParentKind == "CallExpr") {
+    // 1. If the callPath only contains 1 element we have an exact call, e.g.
+    //  foo(int x) -> foo(1)
+    matchIsDet = true;
+  }
+  else if (callPath.size() == 2 && firtstParentKind == "ImplicitCastExpr") {
+    // 2. If the callPath only contains 2 elements:
+    //  <match>: [ implicitCast, callExpr ]
+    // Then we have a 'clean' value besides an implicit cast, e.g.
+    //  foo(MY_INT x) -> foo(1)
+    matchIsDet = true;
+  }
+  // 3. If we have #define statements akin to
+  //  #define XML_FALSE ((XML_Bool)0)
+  //  We get:
+  //   `-ParenExpr 0x564907af8a08 <lib/expat.h:48:19, col:31> 'XML_Bool':'unsigned char'
+  //     `-CStyleCastExpr 0x564907af89e0 <col:20, col:30> 'XML_Bool':'unsigned char' <IntegralCast>
+  //       `-IntegerLiteral 0x564907af89b0 <col:30> 'int' 0
+  //
+
+  if (matchIsDet){
     this->argumentStates.at(paramName).states.insert(value);
 
     // We should always erase one element with this operation
@@ -145,7 +155,6 @@ StateType matchedType, const CallExpr* call, const Expr* matchedExpr){
 
     PRINT_INFO(LITERAL[matchedType] << "> " << paramName << " (det): " << matchedExpr->getID(*ctx) \
         << " (" << this->argumentStates.at(paramName).ids.size() << ")" );
-
   } else {
     // Unmatched base case: nondet()
     this->argumentStates.at(paramName).isNonDet = true;
@@ -308,7 +317,7 @@ run(const MatchFinder::MatchResult &result) {
         // Add a new ArgState entry if one does not exist already
         struct ArgState argState = {
           .ids = std::set<uint64_t>(),
-          .states = std::set<std::variant<char,uint64_t,std::string>>()
+          .states = std::set<variants>()
         }; 
         this->argumentStates.insert(std::make_pair(paramName, argState));
       }
@@ -354,13 +363,12 @@ run(const MatchFinder::MatchResult &result) {
       struct ArgState argState = {
         .isNonDet = true,
         .ids = std::set<uint64_t>(),
-        .states = std::set<std::variant<char,uint64_t,std::string>>(),
+        .states = std::set<variants>(),
       }; 
       this->argumentStates.insert(std::make_pair(paramName, argState));
     } else {
       this->argumentStates.at(paramName).isNonDet = true;
     }
-
   }
   else if (intLiteral) {
     const auto value =  intLiteral->getValue().getLimitedValue();

@@ -16,7 +16,7 @@ static void writeStates(const struct ArgState& argState, std::ofstream &f) {
             f << std::get<uint64_t>(item);
             break;
           case CHR:
-            f << std::get<char>(item);
+            f << std::get<unsigned int>(item);
             break;
           case STR:
             f << std::get<std::string>(item);

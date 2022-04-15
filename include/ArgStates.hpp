@@ -45,7 +45,7 @@ private:
   int getIndexOfParam(const CallExpr* call, std::string paramName);
   void getCallPath(DynTypedNode &parent, std::string bindName, 
     std::vector<DynTypedNode> &callPath);
-  void handleLiteralMatch(std::variant<char,uint64_t,std::string> value,
+  void handleLiteralMatch(variants value,
     StateType matchedType, const CallExpr* call, const Expr* matchedExpr);
   std::string getParamName(const CallExpr* matchedCall, 
    std::vector<DynTypedNode>& callPath, 

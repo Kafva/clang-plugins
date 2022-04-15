@@ -25,6 +25,7 @@
 #define PRINT_WARN(msg) if (getenv(DEBUG_ENV)!=NULL) llvm::errs() << "\033[33m!>\033[0m " << msg << "\n"
 #define PRINT_INFO(msg) if (getenv(DEBUG_ENV)!=NULL) llvm::errs() << "\033[34m!>\033[0m " << msg << "\n"
 typedef unsigned uint;
+typedef std::variant<unsigned int,uint64_t,std::string> variants;
 
 //-----------------------------------------------------------------------------
 // Argument state structures
@@ -45,7 +46,8 @@ struct ArgState {
 
   // We only need one set of states for each Arg
   // This solution with variant requires C++17
-  std::set<std::variant<char,uint64_t,std::string>> states;
+  // Characters a represented as unsigned int
+  std::set<variants> states;
 };
 
 using namespace clang;
