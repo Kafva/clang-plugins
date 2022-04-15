@@ -18,6 +18,14 @@ const char* LITERAL[] = {
   "CHR", "INT", "STR", "NONE"
 };
 
+
+const std::map<std::string,StateType> NodeTypes {
+  {"CharacterLiteral", CHR},
+  {"IntegerLiteral", INT},
+  {"StringLiteral", STR},
+  {"DeclRefExpr", NONE}
+};
+
 int FirstPassMatcher::getIndexOfParam(const CallExpr* call, std::string paramName){
   const auto fnc = call->getDirectCallee();
 
@@ -118,13 +126,11 @@ StateType matchedType, const CallExpr* call){
   // does not exist already
   if (paramIndex == -1) {
     struct ArgState states = {
-      .ParamName = paramName, 
-      .ArgName = "",
-      .States = std::set<std::variant<char,uint64_t,std::string>>()
+      .states = std::set<std::variant<char,uint64_t,std::string>>()
     }; 
-    states.Type = matchedType;
+    states.type = matchedType;
 
-    this->functionStates.push_back(states);
+    //this->argumentStates.push_back(states);
     paramIndex = getIndexOfParam(call, paramName);
   }
   
@@ -142,23 +148,23 @@ StateType matchedType, const CallExpr* call){
   //  It would be opimtal if we could whitelist all patterns that are effectivly just NOOPs
   //  wrapping a literal
   // All other cases are considered nodet for now
-  const auto alreadyNonDet = this->functionStates[paramIndex].IsNonDet;
+  //const auto alreadyNonDet = this->argumentStates[paramIndex].isNonDet;
 
-  if (callPath.size() >= 2 && callPath[callPath.size()-2].getNodeKind().asStringRef() \
-      == "ImplicitCastExpr"  && !alreadyNonDet) {
-    // Insert the encountered state for the given param
-    assert(paramIndex >= 0);
-    this->functionStates[paramIndex].States.insert(value);
+  //if (callPath.size() >= 2 && callPath[callPath.size()-2].getNodeKind().asStringRef() \
+  //    == "ImplicitCastExpr"  && !alreadyNonDet) {
+  //  // Insert the encountered state for the given param
+  //  assert(paramIndex >= 0);
+  //  this->argumentStates[paramIndex].states.insert(value);
 
-    PRINT_INFO(LITERAL[matchedType] << " param (det) " << paramName  << ": ");
-  } else {
-    // If a  parameter should be considered nondet, we will set a flag
-    // for the argument object (preventing further uneccessary analysis,
-    // if other calls are made with det values does not matter if at least
-    // one call uses a nondet argument)
-    this->functionStates[paramIndex].IsNonDet = true;
-    PRINT_INFO(LITERAL[matchedType] << " param (nondet) " << paramName);
-  }
+  //  PRINT_INFO(LITERAL[matchedType] << " param (det) " << paramName  << ": ");
+  //} else {
+  //  // If a  parameter should be considered nondet, we will set a flag
+  //  // for the argument object (preventing further uneccessary analysis,
+  //  // if other calls are made with det values does not matter if at least
+  //  // one call uses a nondet argument)
+  //  this->argumentStates[paramIndex].isNonDet = true;
+  //  PRINT_INFO(LITERAL[matchedType] << " param (nondet) " << paramName);
+  //}
 }
 
 //-----------------------------------------------------------------------------
@@ -241,18 +247,6 @@ FirstPassASTConsumer(std::string symbolName): matchHandler() {
   this->finder.addMatcher(charMatcher,    &(this->matchHandler));
 }
 
-//bool FirstPassMatcher::isLiteralArgument(std::vector<DynTypedNode>& callPath,  ){
-//  const auto alreadyNonDet = this->functionStates[paramIndex].IsNonDet;
-//
-//  // Literal arguments are generally passed as:
-//  //  `-ImplicitCastExpr 0x5627407ed110 <col:13> 'unsigned long' <IntegralCast>
-//  //    `-IntegerLiteral 0x5627407ed0f0 <col:13> 'int' 8
-//  
-//  return callPath.size() == 2 && 
-//     callPath[0].getNodeKind().asStringRef() == "ImplicitCastExpr" &&
-//  }
-//
-//}
 
 void FirstPassMatcher::
 run(const MatchFinder::MatchResult &result) {
@@ -307,29 +301,62 @@ run(const MatchFinder::MatchResult &result) {
     const auto name = anyArg->getStmtClassName();
     util::dumpMatch("ANY", name, matchId+1, this->srcMgr, anyArg->getEndLoc());
 
-    // 1. Traverse further down the experssion to find the leaf node
-
-    // 2. Determine which parameter the leaf node corresponds to
+    // 1. Determine which parameter the leaf node corresponds to
     auto callPath = std::vector<DynTypedNode>();
     const auto paramName = this->getParamName(call, callPath, "ANY"); 
+
+    // Skip matches which correspond to the called function name ('-1'th node of every call)
+    if (paramName == fnc->getName()){
+      return;
+    }
+
+    // 2. Save the nodeID of the leaf stmt for this match
     if (paramName.size()==0){
       PRINT_ERR("Failed to determine param for: ");
       anyArg->dumpColor();
     } else {
-      auto paramIndex = getIndexOfParam(call, paramName);
+      auto leafStmt = util::getFirstLeaf(anyArg, ctx);
 
-      // 3. Check if the leaf node is a literal AND the callpath only contains
-      // 'NOOPS' like ImplicitCastExpr and ParenExpr
-      // If any other expressions appear, mark this as nondet
-      //
-      // If its a plain literal reference, add it to the state space
-      // (TODO remove the other literal matchers)
+      if (this->argumentStates.count(paramName) == 0) {
+        // Add a new ArgState entry does not exist already
+        struct ArgState argState = {
+          .ids = std::set<uint64_t>(),
+          .states = std::set<std::variant<char,uint64_t,std::string>>()
+        }; 
+        this->argumentStates.insert(std::make_pair(paramName, argState));
+      }
 
-      // Check if the match mets the conditions for a det() match
-      // if not, set it as nondet
+      // Set the argument type
+      const auto className = leafStmt->getStmtClassName();
+      if (NodeTypes.find(className) != NodeTypes.end()){
+        this->argumentStates.at(paramName).type = NodeTypes.at(className);
+      } else {
+        PRINT_ERR("Unhandled leaf node type: " << className);
+      }
 
-      //PRINT_INFO(paramName << " " << paramIndex );
+      PRINT_INFO(paramName << ": " << leafStmt->getID(*ctx) << " " << className);
+
+      uint64_t stmtID = leafStmt->getID(*ctx);
+      this->argumentStates.at(paramName).ids.insert(stmtID);
     }
+
+
+
+
+    // A ::Tree object is needed to properly find children...
+    //  https://clang.llvm.org/doxygen/classclang_1_1syntax_1_1Tree.html#details
+
+
+    //auto exprNode = this->nodeMap.at("ANY");
+    //for (auto child : anyArg->children() ){
+    //  
+    //  // If the final child ID matches that of a literal (that we match later)
+    //  // we can remove it, if the list of matched IDs for a specific argument
+    //  // is non-empty at the end of matching => nondet
+    //  PRINT_WARN( child->getID(*ctx) );
+    //}
+    
+
 
   }
 

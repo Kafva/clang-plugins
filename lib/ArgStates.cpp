@@ -31,11 +31,11 @@ void ArgStatesASTConsumer::HandleTranslationUnit(ASTContext &ctx) {
 
     // Copy over the function states
     // Note that the first pass only adds literals and the second adds declrefs
-    secondPass->matchHandler.functionStates = firstPass->matchHandler.functionStates;
+    secondPass->matchHandler.argumentStates = firstPass->matchHandler.argumentStates;
     //secondPass->HandleTranslationUnit(ctx);
 
     // Overwrite the states
-    this->functionStates = secondPass->matchHandler.functionStates;
+    this->argumentStates = secondPass->matchHandler.argumentStates;
 }
 
 //-----------------------------------------------------------------------------

@@ -39,7 +39,7 @@ public:
   void run(const MatchFinder::MatchResult &) override;
   void onEndOfTranslationUnit() override {};
 
-  std::vector<ArgState> functionStates;
+  std::unordered_map<std::string,ArgState> argumentStates;
   std::string filename;
 private:
   int getIndexOfParam(const CallExpr* call, std::string paramName);
@@ -82,7 +82,7 @@ public:
   void run(const MatchFinder::MatchResult &) override;
   void onEndOfTranslationUnit() override {};
   
-  std::vector<ArgState> functionStates;
+  std::unordered_map<std::string,ArgState> argumentStates;
 };
 
 class SecondPassASTConsumer : public ASTConsumer {
@@ -111,7 +111,7 @@ private:
   std::string getOutputPath();
   std::string symbolName;
   std::string filename;
-  std::vector<ArgState> functionStates;
+  std::unordered_map<std::string,ArgState> argumentStates;
 };
 
 #endif

@@ -4,8 +4,8 @@ import json, re, subprocess, sys, os
 TARGET_DIR="/home/jonas/.cache/euf/libexpat-90ed5777/expat"
 PLUGIN="/home/jonas/Repos/euf/clang-suffix/build/lib/libArgStates.so"
 SYMBOL_NAME="XML_ExternalEntityParserCreate"
-#SOURCE_SUB_DIR=f"{TARGET_DIR}/xmlwf"
-SOURCE_SUB_DIR=f"{TARGET_DIR}/lib"
+SOURCE_SUB_DIR=f"{TARGET_DIR}/xmlwf"
+#SOURCE_SUB_DIR=f"{TARGET_DIR}/lib"
 
 SYMBOL_LIST="/home/jonas/Repos/euf/tests/expected/libexpat_90ed_ef31_change_set.txt"
 OUTDIR="/home/jonas/Repos/euf/clang-suffix/states"

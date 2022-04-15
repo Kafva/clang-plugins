@@ -35,16 +35,17 @@ enum StateType {
 };
 
 struct ArgState {
-  // The ArgName will be empty for literals
-  std::string ParamName;
-  std::string ArgName;
-  bool IsNonDet = false;
-  StateType Type = NONE;
+  // The paramater name will be the key in an unordered_map of ArgState objects
+  bool isNonDet = false;
+  StateType type = NONE;
 
+  // Populated with the (leaf) node ID of every expr that is passed
+  // to this function parameter in the current TU
+  std::set<uint64_t> ids;
 
   // We only need one set of states for each Arg
   // This solution with variant requires C++17
-  std::set<std::variant<char,uint64_t,std::string>> States;
+  std::set<std::variant<char,uint64_t,std::string>> states;
 };
 
 using namespace clang;

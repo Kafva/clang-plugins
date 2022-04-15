@@ -8,6 +8,8 @@
 //-----------------------------------------------------------------------------
 
 namespace util {
+  
+  const Stmt* getFirstLeaf(const Stmt* stmt, ASTContext* ctx);
 
   // Template functions need to be visible to every TU that uses them and
   // one must therefore have the implementation inside of a header

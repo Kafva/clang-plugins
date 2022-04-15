@@ -33,6 +33,7 @@ set(ArgStates_SOURCES
   FirstPass.cpp
   SecondPass.cpp
   WriteJson.cpp
+  Util.cpp
 )
 
 # CONFIGURE THE PLUGIN LIBRARIES

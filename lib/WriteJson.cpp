@@ -7,11 +7,11 @@ static void addComma(std::ofstream &f, uint iter, uint size, bool newline=false)
     newline && f << "\n";
 }
 static void writeStates(const struct ArgState& argState, std::ofstream &f) {
-      uint stateSize = argState.States.size();
+      uint stateSize = argState.states.size();
       uint k = 0;
-      for (const auto &item : argState.States) {
+      for (const auto &item : argState.states) {
         // Write the correct type
-        switch(argState.Type){
+        switch(argState.type){
           case INT:
             f << std::get<uint64_t>(item);
             break;
@@ -30,9 +30,9 @@ static void writeStates(const struct ArgState& argState, std::ofstream &f) {
 }
 
 void ArgStatesASTConsumer::dumpArgStates(){
-  // We dump the functionStates as JSON for the current TU only and join the
+  // We dump the argumentStates as JSON for the current TU only and join the
   // values externally in Python
-  if (this->functionStates.size() == 0){
+  if (this->argumentStates.size() == 0){
     return;
   }
   auto filename = this->getOutputPath();
@@ -51,18 +51,18 @@ void ArgStatesASTConsumer::dumpArgStates(){
     << INDENT << "\"" << symbolName << "\": {\n";
 
 
-  uint argCnt = this->functionStates.size();
+  uint argCnt = this->argumentStates.size();
   uint i = 0;
-  for (const auto &argState : this->functionStates) {
+  for (const auto &argStatePair : this->argumentStates) {
 
-    f << INDENT << INDENT << "\"" << argState.ParamName << "\": [";
+    f << INDENT << INDENT << "\"" << argStatePair.first << "\": [";
 
     // Nondet arguments will have been given an empty list of states
-    if (!argState.IsNonDet){
+    if (!argStatePair.second.isNonDet){
       f << "\n" << INDENT << INDENT << INDENT;
 
       // Only one of the state sets will contain values for an argument
-      writeStates(argState, f);
+      writeStates(argStatePair.second, f);
       f << "\n" << INDENT << INDENT;
     }
 
