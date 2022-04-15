@@ -124,7 +124,7 @@ StateType matchedType, const CallExpr* call, const Expr* matchedExpr){
     //     `-CStyleCastExpr 'XML_Bool':'unsigned char' <IntegralCast>
     //       `-IntegerLiteral 'int' 0
     //
-    // We can exclude all types of 'NOOP' casts and '()' like this one 
+    // We can exclude all types of 'NOOP' and '()' casts like this one 
     // from an expression using built-in functionality in clang and 
     // then check if the simplified top argument
     // corresponds to the integral type that we matched to handle these cases
