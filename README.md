@@ -1,4 +1,4 @@
-clang-tutor
+clang-plugins
 =========
 [![Build Status](https://app.travis-ci.com/banach-space/clang-tutor.svg?branch=main)](https://app.travis-ci.com/banach-space/clang-tutor)
 [![Build Status](https://github.com/banach-space/clang-tutor/workflows/x86-Ubuntu/badge.svg?branch=main)](https://github.com/banach-space/clang-tutor/actions?query=workflow%3Ax86-Ubuntu+branch%3Amain)
