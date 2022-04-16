@@ -4,8 +4,8 @@ import json, re, subprocess, sys, os
 TARGET_DIR="/home/jonas/.cache/euf/libexpat-90ed5777/expat"
 PLUGIN="/home/jonas/Repos/euf/clang-plugins/build/lib/libArgStates.so"
 SYMBOL_NAME="XML_ExternalEntityParserCreate"
-SOURCE_SUB_DIR=f"{TARGET_DIR}/xmlwf"
-#SOURCE_SUB_DIR=f"{TARGET_DIR}/lib"
+#SOURCE_SUB_DIR=f"{TARGET_DIR}/xmlwf"
+SOURCE_SUB_DIR=f"{TARGET_DIR}/lib"
 
 SYMBOL_LIST="/home/jonas/Repos/euf/tests/expected/libexpat_90ed_ef31_change_set.txt"
 OUTDIR="/home/jonas/Repos/euf/clang-plugins/states"
@@ -51,9 +51,11 @@ def call_arg_states(ccdb_args: list[str], cwd: str, symbol_name: str) -> None:
     blacklist = r"|".join(["-g", "-c", r"-f.*", r"-W.*"])
 
     ccdb_filtered  = filter(lambda a: not re.match(blacklist, a), ccdb_args)
+    out = subprocess.DEVNULL
     script_env = os.environ.copy()
     script_env.update({ "ARG_STATES_OUT_DIR": OUTDIR })
-    script_env.update({ "DEBUG_AST": "1" })
+    script_env.update({ "DEBUG_AST": "1" }); out = sys.stderr
+
 
 
     # We assume that the isystem-flags are the same for all source files in a directory
@@ -64,7 +66,6 @@ def call_arg_states(ccdb_args: list[str], cwd: str, symbol_name: str) -> None:
         list(INPUT_FILES) + [ "-I", "/usr/include" ] + list(ccdb_filtered)
 
     #print(f"({cwd})> \n", ' '.join(cmd))
-    out = sys.stderr
     subprocess.run(cmd, cwd = cwd, stdout = out, stderr = out, env = script_env)
 
 # We will run the plugin once PER changed name PER source directory
@@ -89,3 +90,4 @@ with open(f"{TARGET_DIR}/compile_commands.json", mode = 'r', encoding='utf8') as
             sym = sym.rstrip('\n')
             print(f"===> {sym} <===")
             call_arg_states(list(ccdb_args), SOURCE_SUB_DIR, sym)
+            break

@@ -19,7 +19,10 @@ static void writeStates(const struct ArgState& argState, std::ofstream &f) {
             f << std::get<unsigned int>(item);
             break;
           case STR:
-            f << std::get<std::string>(item);
+            f << "\"" << std::get<std::string>(item) << "\"";
+            break;
+          case UNARY:
+            f << std::get<uint64_t>(item);
             break;
           default:
             PRINT_ERR("ArgState with 'NONE' type encountered");

@@ -21,7 +21,7 @@
 #define DEBUG_ENV "DEBUG_AST"
 #define INDENT "  "
 
-#define PRINT_ERR(msg)  if (getenv(DEBUG_ENV)!=NULL) llvm::errs() << \
+#define PRINT_ERR(msg)                              llvm::errs() << \
                             "\033[31m!>\033[0m " << msg << "\n"
 #define PRINT_WARN(msg) if (getenv(DEBUG_ENV)!=NULL) llvm::errs() << \
                             "\033[33m!>\033[0m " << msg << "\n"
@@ -35,7 +35,7 @@ typedef std::variant<unsigned int,uint64_t,std::string> variants;
 // We will need a seperate struct for passing values to the second pass
 //-----------------------------------------------------------------------------
 enum StateType {
-  CHR, INT, STR, NONE
+  CHR, INT, STR, UNARY, NONE
 };
 
 struct ArgState {

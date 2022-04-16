@@ -4,13 +4,14 @@
 // Indexed using the StateType enum to get the
 // corresponding string for each enum
 const char* LITERAL[] = {
-  "CHR", "INT", "STR", "NONE"
+  "CHR", "INT", "STR", "UNARY", "NONE"
 };
 
-const std::map<std::string,StateType> NodeTypes {
+const std::unordered_map<std::string,StateType> NodeTypes {
   {"CharacterLiteral", CHR},
   {"IntegerLiteral", INT},
   {"StringLiteral", STR},
+  {"UnaryExprOrTypeTraitExpr", UNARY},
   {"DeclRefExpr", NONE}
 };
 
@@ -34,6 +35,7 @@ void FirstPassMatcher::getCallPath(DynTypedNode &parent,
     }
 }
 
+/// Returns the parameter index (as a numeric string) if the parameter is unnamed
 std::string FirstPassMatcher::getParamName(const CallExpr* matchedCall, 
  std::vector<DynTypedNode>& callPath, 
  const char* bindName){
@@ -80,10 +82,18 @@ std::string FirstPassMatcher::getParamName(const CallExpr* matchedCall,
     else if (argumentIndex < int(matchedCall->getNumArgs()) ){
       // No match found if the index reaches NumArgs
 
-      // Fetch the name of the parameter from the function declaration
-      const auto funcDecl   = matchedCall->getDirectCallee();
+      // Fetch the name of the parameter from the (first) function declaration
+      const auto funcDecl   = matchedCall->getDirectCallee()->getFirstDecl();
       const auto paramDecl  = funcDecl->getParamDecl(argumentIndex);
+
       paramName             = std::string(paramDecl->getName());
+
+      if (paramName.size() == 0){
+        // Some declarations omit naming their paramters, e.g. 
+        // void foo(int, char*) for these cases we use the parameter index 
+        // (starting from 0) to identify each argument
+        paramName = std::to_string(argumentIndex);
+      }
     } 
   }
 
@@ -226,6 +236,10 @@ FirstPassASTConsumer(std::string symbolName): matchHandler() {
   const auto stringMatcher  = stringLiteral(isArgumentOfCall).bind(LITERAL[STR]);
   const auto charMatcher    = characterLiteral(isArgumentOfCall).bind(LITERAL[CHR]);
   
+  // Calls to 'sizeof()' and 'alignof()', which are both compile time constants, 
+  // are matched with this node type
+  const auto unaryExprMatcher   = unaryExprOrTypeTraitExpr(isArgumentOfCall).bind(LITERAL[UNARY]);
+  
   // Note, for a sound solution we cannot exclude any calls (except those that
   // do not use the return value). We must therefore have a liberal matcher
   // that matches any argument formation for each parameter, if this matcher
@@ -247,6 +261,7 @@ FirstPassASTConsumer(std::string symbolName): matchHandler() {
   this->finder.addMatcher(intMatcher,     &(this->matchHandler));
   this->finder.addMatcher(stringMatcher,  &(this->matchHandler));
   this->finder.addMatcher(charMatcher,    &(this->matchHandler));
+  this->finder.addMatcher(unaryExprMatcher,    &(this->matchHandler));
 }
 
 
@@ -285,6 +300,7 @@ run(const MatchFinder::MatchResult &result) {
   const auto *intLiteral = result.Nodes.getNodeAs<IntegerLiteral>(LITERAL[INT]);
   const auto *strLiteral = result.Nodes.getNodeAs<StringLiteral>(LITERAL[STR]);
   const auto *chrLiteral = result.Nodes.getNodeAs<CharacterLiteral>(LITERAL[CHR]);
+  const auto *unaryExpr  = result.Nodes.getNodeAs<UnaryExprOrTypeTraitExpr>(LITERAL[UNARY]);
   
   // To correlate the arguments that we match agianst to parameters in the function call
   // we need to traverse the call experssion and pair the arguments with the Parms from the FNC
@@ -388,6 +404,20 @@ run(const MatchFinder::MatchResult &result) {
     const auto value =  chrLiteral->getValue();
     util::dumpMatch(LITERAL[CHR], value, 1, this->srcMgr, chrLiteral->getLocation());
     this->handleLiteralMatch(value, CHR, call, chrLiteral);
+  }
+  else if (unaryExpr) {
+    // Matches alignof() and sizeof(), instead of inserting these values 
+    // as text we evaluate them as integer values
+    //  https://clang.llvm.org/doxygen/classclang_1_1UnaryExprOrTypeTraitExpr.html#details
+    Expr::EvalResult res;
+    unaryExpr->EvaluateAsInt(res, *ctx);
+    if (res.HasSideEffects || res.HasUndefinedBehavior) {
+      util::dumpMatch(LITERAL[UNARY], "FAILED to evaluate", 1, this->srcMgr, unaryExpr->getEndLoc());
+    } else {
+      const auto value = res.Val.getInt().getLimitedValue();
+      util::dumpMatch(LITERAL[UNARY], value, 1, this->srcMgr, unaryExpr->getEndLoc());
+      this->handleLiteralMatch(value, UNARY, call, unaryExpr);
+    }
   }
 }
 
