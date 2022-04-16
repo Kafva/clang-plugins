@@ -20,7 +20,7 @@ run: $(OUTPUT)
 	@mkdir -p states
 	@rm -f states/*
 	./run.py
-	bat states/*.json
+	bat ../.states/*.json
 
 clean:
 	rm -rf $(BUILD_DIR)
