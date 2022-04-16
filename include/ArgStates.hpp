@@ -22,6 +22,10 @@
 //  The params which are only used with finite values as arguments can
 //  be restriced during harness generation
 //
+//  Note that the argument names in EUF are derived from calls (not declarations)
+//  so it is integral that parameters in the output from the plugin follow the call order
+//  We therefore use a vector for the arguments rather than a map or list
+//
 //  https://clang.llvm.org/docs/LibASTMatchersTutorial.html
 //
 
@@ -39,15 +43,14 @@ public:
   void run(const MatchFinder::MatchResult &) override;
   void onEndOfTranslationUnit() override {};
 
-  std::unordered_map<std::string,ArgState> argumentStates;
+  std::vector<ArgState> argumentStates;
   std::string filename;
 private:
-  int getIndexOfParam(const CallExpr* call, std::string paramName);
   void getCallPath(DynTypedNode &parent, std::string bindName, 
     std::vector<DynTypedNode> &callPath);
   void handleLiteralMatch(variants value,
     StateType matchedType, const CallExpr* call, const Expr* matchedExpr);
-  std::string getParamName(const CallExpr* matchedCall, 
+  std::tuple<std::string,int> getParam(const CallExpr* matchedCall, 
    std::vector<DynTypedNode>& callPath, 
    const char* bindName);
 
@@ -82,7 +85,7 @@ public:
   void run(const MatchFinder::MatchResult &) override;
   void onEndOfTranslationUnit() override {};
   
-  std::unordered_map<std::string,ArgState> argumentStates;
+  std::vector<ArgState> argumentStates;
 };
 
 class SecondPassASTConsumer : public ASTConsumer {
@@ -111,7 +114,7 @@ private:
   std::string getOutputPath();
   std::string symbolName;
   std::string filename;
-  std::unordered_map<std::string,ArgState> argumentStates;
+  std::vector<ArgState> argumentStates;
 };
 
 #endif

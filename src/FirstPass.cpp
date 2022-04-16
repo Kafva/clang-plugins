@@ -35,8 +35,9 @@ void FirstPassMatcher::getCallPath(DynTypedNode &parent,
     }
 }
 
-/// Returns the parameter index (as a numeric string) if the parameter is unnamed
-std::string FirstPassMatcher::getParamName(const CallExpr* matchedCall, 
+/// Returns the parameter index and parameter name given a matched expression under
+/// the matched call (an empty parameter name is given for unnamed parameters)
+std::tuple<std::string,int> FirstPassMatcher::getParam(const CallExpr* matchedCall, 
  std::vector<DynTypedNode>& callPath, 
  const char* bindName){
   std::string paramName = "";
@@ -77,7 +78,9 @@ std::string FirstPassMatcher::getParamName(const CallExpr* matchedCall,
 
     if ( ourExpr->getID(*ctx) == matchedCall->getCallee()->getID(*ctx) ){
       // Check if our expression actually corresponds to the functionDecl node at index '-1'
+      // The paramName will be the function name in this case
       paramName = std::string(matchedCall->getDirectCallee()->getName());
+      argumentIndex = -1;
     } 
     else if (argumentIndex < int(matchedCall->getNumArgs()) ){
       // No match found if the index reaches NumArgs
@@ -86,34 +89,30 @@ std::string FirstPassMatcher::getParamName(const CallExpr* matchedCall,
       const auto funcDecl   = matchedCall->getDirectCallee()->getFirstDecl();
       const auto paramDecl  = funcDecl->getParamDecl(argumentIndex);
 
+      // Some declarations omit naming their paramters, e.g. 
+      // void foo(int, char*), the name will be empty in these scenarios
       paramName             = std::string(paramDecl->getName());
-
-      if (paramName.size() == 0){
-        // Some declarations omit naming their paramters, e.g. 
-        // void foo(int, char*) for these cases we use the parameter index 
-        // (starting from 0) to identify each argument
-        paramName = std::to_string(argumentIndex);
-      }
     } 
   }
 
-  return paramName;
+  return std::tuple(paramName,argumentIndex);
 }
 
 void FirstPassMatcher::handleLiteralMatch(variants value,
 StateType matchedType, const CallExpr* call, const Expr* matchedExpr){
   // Determine which parameter this argument corresponds to
   auto callPath = std::vector<DynTypedNode>();
-  const auto paramName = this->getParamName(call, callPath, LITERAL[matchedType]); 
+  const auto param = this->getParam(call, callPath, LITERAL[matchedType]); 
+  const std::string paramName  = std::get<0>(param);
+  const int paramIndex         = std::get<1>(param);
   
   // An argState entry should already exist from the ANY-matching stage for each param
-  assert(this->argumentStates.count(paramName) > 0 && 
-      this->argumentStates.at(paramName).type == matchedType);
+  assert(this->argumentStates[paramIndex].type == matchedType);
 
   // The callPath always contains at least one element: <match> [ callexpr ]
   assert(callPath.size() >= 1);
 
-  const auto argState         = this->argumentStates.at(paramName);
+  const auto argState         = this->argumentStates[paramIndex];
   const auto firtstParentKind = callPath[0].getNodeKind().asStringRef();
   
   bool matchIsDet = false;
@@ -154,26 +153,26 @@ StateType matchedType, const CallExpr* call, const Expr* matchedExpr){
   }
 
   if (matchIsDet){
-    this->argumentStates.at(paramName).states.insert(value);
+    this->argumentStates[paramIndex].states.insert(value);
 
     // We remove the ids for every match that corresponds to a det() case 
     // At the final write-to-disk stage, the params with an empty ids[] set
     // are those that can be considered det()
     // Exactly one element should be erased with this operation
     assert(
-      this->argumentStates.at(paramName).ids.erase(matchedExpr->getID(*ctx)) 
+      this->argumentStates[paramIndex].ids.erase(matchedExpr->getID(*ctx)) 
       == 1
     );
 
     PRINT_INFO(LITERAL[matchedType] << "> " << paramName << " (det): "
         << matchedExpr->getID(*ctx) << " (" 
-        << this->argumentStates.at(paramName).ids.size() << ")" );
+        << this->argumentStates[paramIndex].ids.size() << ")" );
   } else {
     // Unmatched base case: nondet()
-    this->argumentStates.at(paramName).isNonDet = true;
+    this->argumentStates[paramIndex].isNonDet = true;
     PRINT_INFO(LITERAL[matchedType] << "> " << paramName << " (nondet): " 
         << matchedExpr->getID(*ctx) << " (" 
-        << this->argumentStates.at(paramName).ids.size() << ")" );
+        << this->argumentStates[paramIndex].ids.size() << ")" );
   }
 }
 
@@ -320,42 +319,55 @@ run(const MatchFinder::MatchResult &result) {
 
     // Determine which parameter the leaf node corresponds to
     auto callPath = std::vector<DynTypedNode>();
-    const auto paramName = this->getParamName(call, callPath, "ANY"); 
+    const auto param = this->getParam(call, callPath, "ANY"); 
+    const std::string paramName  = std::get<0>(param);
+    const int paramIndex         = std::get<1>(param);
 
     // Skip matches which correspond to the called function name ('-1'th node of every call)
     if (paramName == fnc->getName()){
       return;
     }
 
-    if (paramName.size()==0){
+    if (paramName.size()==0 && paramIndex == -1){
       PRINT_ERR("ANY> Failed to determine param for: ");
       anyArg->dumpColor();
     } else {
       auto leafStmt = util::getFirstLeaf(anyArg, ctx);
 
-      if (this->argumentStates.count(paramName) == 0) {
-        // Add a new ArgState entry if one does not exist already
+      // If the array contains fewer elements than the paramIndex
+      // insert dummy elements starting from the first unintialized position
+      // We cannot simply insert a parameter at the current last position
+      // since there is not guarantee that we encounter the function
+      // arguments in order, i.e. the first match could be the fifth argument
+      while ((int)this->argumentStates.size() <= paramIndex) {
         struct ArgState argState = {
           .ids = std::set<uint64_t>(),
-          .states = std::set<variants>()
+          .states = std::set<variants>(),
         }; 
-        this->argumentStates.insert(std::make_pair(paramName, argState));
+
+        // Set the paramName once we reach the correct index
+        if ((int)this->argumentStates.size()==paramIndex){
+          argState.paramName = paramName;
+        }
+
+        this->argumentStates.push_back(argState);
       }
+
 
       // Set the argument type
       const auto className = leafStmt->getStmtClassName();
       if (NodeTypes.find(className) != NodeTypes.end()){
-        this->argumentStates.at(paramName).type = NodeTypes.at(className);
+        this->argumentStates[paramIndex].type = NodeTypes.at(className);
       } else {
         PRINT_ERR("ANY> Unhandled leaf node type: " << className);
       }
       
       // Save the nodeID of the leaf stmt for this match
       uint64_t stmtID = leafStmt->getID(*ctx);
-      this->argumentStates.at(paramName).ids.insert(stmtID);
+      this->argumentStates[paramIndex].ids.insert(stmtID);
 
       PRINT_INFO("ANY> " << paramName << " "<< className << ": " << leafStmt->getID(*ctx) \
-          << " (" << this->argumentStates.at(paramName).ids.size() << ")" );
+          << " (" << this->argumentStates[paramIndex].ids.size() << ")" );
     }
   }
   /***** Second matching stage ****/
@@ -371,24 +383,30 @@ run(const MatchFinder::MatchResult &result) {
     //  for every reference that we encounter in the 1st pass
     
     auto callPath = std::vector<DynTypedNode>();
-    auto paramName = this->getParamName(call, callPath, "REF"); 
+    auto param    = this->getParam(call, callPath, "REF"); 
+    const std::string paramName  = std::get<0>(param);
+    const int paramIndex         = std::get<1>(param);
 
     if (paramName == fnc->getName()){
       return;
     }
 
     // Set all declrefs as nondet()
-    if (this->argumentStates.count(paramName) == 0) {
-      // Add a new ArgState entry if one does not exist already
+    while ((int)this->argumentStates.size() <= paramIndex) {
       struct ArgState argState = {
-        .isNonDet = true,
         .ids = std::set<uint64_t>(),
         .states = std::set<variants>(),
       }; 
-      this->argumentStates.insert(std::make_pair(paramName, argState));
-    } else {
-      this->argumentStates.at(paramName).isNonDet = true;
+
+      // Set specific values once we reach the correct index
+      if ((int)this->argumentStates.size()==paramIndex){
+        argState.paramName = paramName;
+        argState.isNonDet = true;
+      }
+
+      this->argumentStates.push_back(argState);
     }
+    
   }
   else if (intLiteral) {
     const auto value =  intLiteral->getValue().getLimitedValue();

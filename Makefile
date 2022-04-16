@@ -8,6 +8,8 @@ SRCS=src/ArgStates.cpp src/SecondPass.cpp src/FirstPass.cpp src/WriteJson.cpp \
 		 include/ArgStates.hpp include/Util.hpp include/Base.hpp
 .PHONY: clean run
 
+STATES=../.states
+
 $(OUTPUT): $(BUILD_DIR)/Makefile $(SRCS)
 	make -C $(BUILD_DIR) -j$(NPROC) ArgStates
 
@@ -17,10 +19,10 @@ $(BUILD_DIR)/Makefile:
 	cmake -DCT_Clang_INSTALL_DIR=$(CLANG_DIR) -S. -B $(BUILD_DIR)
 
 run: $(OUTPUT)
-	@mkdir -p states
-	@rm -f states/*
+	@mkdir -p $(STATES)
+	@rm -f $(STATES)/*
 	./run.py
-	bat ../.states/*.json
+	bat $(STATES)/*.json
 
 clean:
 	rm -rf $(BUILD_DIR)

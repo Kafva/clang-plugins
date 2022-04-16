@@ -16,6 +16,8 @@
 #include <vector>
 #include <set>
 #include <variant>
+#include <tuple>
+
 
 #define OUTPUT_DIR_ENV "ARG_STATES_OUT_DIR"
 #define DEBUG_ENV "DEBUG_AST"
@@ -39,7 +41,6 @@ enum StateType {
 };
 
 struct ArgState {
-  // The paramater name will be the key in an unordered_map of ArgState objects
   bool isNonDet = false;
   StateType type = NONE;
 
@@ -51,6 +52,10 @@ struct ArgState {
   // This solution with variant requires C++17
   // Characters a represented as unsigned int
   std::set<variants> states;
+
+  // Will be empty for parameters without names in their declaration, e.g.
+  //  foo(int, char*)
+  std::string paramName;
 };
 
 using namespace clang;

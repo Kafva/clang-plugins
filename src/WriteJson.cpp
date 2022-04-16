@@ -54,26 +54,33 @@ void ArgStatesASTConsumer::dumpArgStates(){
     << INDENT << "\"" << symbolName << "\": {\n";
 
 
+  std::string paramName;
+  ArgState argState;
   uint argCnt = this->argumentStates.size();
-  uint i = 0;
-  for (const auto &argStatePair : this->argumentStates) {
+  for (uint i = 0; i < this->argumentStates.size(); i++) {
+    argState = this->argumentStates[i]; 
 
-    f << INDENT << INDENT << "\"" << argStatePair.first << "\": [";
+    // Fallback to parameter index for unnamed entries
+    paramName = argState.paramName.size()==0 ? 
+                std::to_string(i) :
+                paramName = argState.paramName;
+
+    f << INDENT << INDENT << "\"" << paramName << "\": [";
 
     // nondet() arguments will have been given an empty list of states
     // det() arguments need to have an empty ids[] set, otherwise an invocation
     // matched by ANY still exists that is nondet() for the argument
-    if (!argStatePair.second.isNonDet && argStatePair.second.ids.size() == 0){
+    if (!argState.isNonDet && argState.ids.size() == 0){
       f << "\n" << INDENT << INDENT << INDENT;
 
       // Only one of the state sets will contain values for an argument
-      writeStates(argStatePair.second, f);
+      writeStates(argState, f);
       f << "\n" << INDENT << INDENT;
     }
 
     f << "]";
     
-    addComma(f,++i,argCnt,true);
+    addComma(f,i+1,argCnt,true);
   }
 
   f << INDENT << "}\n"
