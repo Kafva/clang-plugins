@@ -20,7 +20,6 @@ $(BUILD_DIR)/Makefile:
 
 run: $(OUTPUT)
 	@mkdir -p $(STATES)
-	@rm -f $(STATES)/*
 	./run.py
 	bat $(STATES)/*.json
 
