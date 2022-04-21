@@ -6,9 +6,11 @@ OUT_LIB=$(BUILD_DIR)/lib/libArgStates.so
 OUTPUT= $(OUT_LIB) $(OUT_EXEC)
 SRCS=src/ArgStates.cpp src/SecondPass.cpp src/FirstPass.cpp src/WriteJson.cpp \
 		 include/ArgStates.hpp include/Util.hpp include/Base.hpp
-.PHONY: clean run
+.PHONY: clean run all
 
 STATES=../.states
+
+all: $(OUTPUT)
 
 $(OUTPUT): $(BUILD_DIR)/Makefile $(SRCS)
 	make -C $(BUILD_DIR) -j$(NPROC) ArgStates
