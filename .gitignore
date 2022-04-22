@@ -1,4 +1,5 @@
 states
+.states
 arg_states.json
 .ccls-cache
 # Prerequisites
