@@ -8,8 +8,8 @@ sys.path.append("..")
 
 BASE_DIR = f"{str(Path(__file__).parent.parent.absolute())}/clang-plugins"
 
-from cparser.arg_states import get_subdir_tus, call_arg_states_plugin
-from cparser.util import mkdir_p, remove_files_in
+from src.arg_states import get_subdir_tus, call_arg_states_plugin
+from src.util import mkdir_p, remove_files_in
 
 QUIET = False
 SYMBOL_LIST="/home/jonas/Repos/euf/tests/expected/libexpat_90ed_ef31_change_set.txt"
