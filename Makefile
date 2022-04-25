@@ -8,7 +8,7 @@ SRCS=src/ArgStates.cpp src/SecondPass.cpp src/FirstPass.cpp src/WriteJson.cpp \
 		 include/ArgStates.hpp include/Util.hpp include/Base.hpp
 .PHONY: clean run all
 
-STATES=../.states
+STATES=.states
 
 all: $(OUTPUT)
 

@@ -92,8 +92,10 @@ std::string ArgStatesASTConsumer::getOutputPath(){
     const auto outputDir = std::string(getenv(OUTPUT_DIR_ENV));
     if (this->filename.size() >= 2 && outputDir.size() > 0) {
       // <sym_name>_<tu>.json
+      // Note that we include file extensions in the <tu> since
+      // there could be .h and .c files with the same name
       auto outputPath = outputDir + "/" + this->symbolName + "_" + 
-                        this->filename.substr(0,this->filename.size()-2) +
+                        this->filename +
                         ".json";
       return outputPath;
     } else {

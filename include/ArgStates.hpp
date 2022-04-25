@@ -86,6 +86,13 @@ public:
   void onEndOfTranslationUnit() override {};
   
   std::vector<ArgState> argumentStates;
+private:
+  SourceManager* srcMgr;
+  BoundNodes::IDToNodeMap nodeMap;
+
+  // Holds contxtual information about the AST, this allows
+  // us to determine e.g. the parents of a matched node
+  ASTContext* ctx;
 };
 
 class SecondPassASTConsumer : public ASTConsumer {

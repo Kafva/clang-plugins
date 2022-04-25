@@ -4,6 +4,7 @@
 //-----------------------------------------------------------------------------
 // SecondPassASTConsumer- implementation
 // SecondPassMatcher-     implementation
+// (Unfinished)
 //-----------------------------------------------------------------------------
 void SecondPassASTConsumer::HandleTranslationUnit(ASTContext &ctx) {
   this->finder.matchAST(ctx);
@@ -36,12 +37,25 @@ SecondPassASTConsumer(std::string symbolName) : matchHandler() {
 
 void SecondPassMatcher::
 run(const MatchFinder::MatchResult &result) {
-    // Holds information on the actual sourc code
-    const auto srcMgr = result.SourceManager;
+    // In the second pass we will match agianst every plain declRef
+    // that was encountered as an argument during the first pass
+    //
+    // We can only derive state information if we find ALL references
+    // to the the variable, and all are simple assignments
+    // or simple statements where we know its value is unchanged.
+    //
+    // Any reference to the variable which we cannot conclusivly
+    // say gives it a new value or does NOT give it a new value
+    // need to be treated as potential state changes...
+
+
+    // Holds information on the actual source code
+    this->srcMgr = result.SourceManager;
 
     // Holds contxtual information about the AST, this allows
     // us to determine e.g. the parents of a matched node
-    //const auto ctx = result.Context;
+    this->ctx = result.Context;
+    this->nodeMap = result.Nodes.getMap();
 
     //const auto *call       = result.Nodes.getNodeAs<CallExpr>("CALL");
     const auto *declRef    = result.Nodes.getNodeAs<DeclRefExpr>("REF");
