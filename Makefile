@@ -1,4 +1,4 @@
-CLANG_DIR=/usr
+CLANG_DIR?=/usr
 BUILD_DIR=$(shell pwd)/build
 NPROC=$(shell echo $$((`nproc` - 1)))
 
@@ -18,7 +18,7 @@ $(OUTPUT): $(BUILD_DIR)/Makefile $(SRCS)
 #	-DCMAKE_CXX_FLAGS=-std=c++17
 $(BUILD_DIR)/Makefile:
 	mkdir -p $(BUILD_DIR)
-	cmake -DCT_Clang_INSTALL_DIR=$(CLANG_DIR) -S. -B $(BUILD_DIR)
+	cmake -DCLANG_INSTALL_DIR=$(CLANG_DIR) -S. -B $(BUILD_DIR)
 
 run: $(OUTPUT)
 	@mkdir -p $(STATES)
