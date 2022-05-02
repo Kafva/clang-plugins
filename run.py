@@ -25,7 +25,7 @@ TARGET_DIR=f"{expanduser('~')}/.cache/euf/libexpat-90ed5777/expat"
 SOURCE_SUB_DIR=f"{TARGET_DIR}/lib"
 
 if __name__ == '__main__':
-    CONFIG.update_from_file(f"{BASE_DIR}/../examples/expat/base.json")
+    CONFIG.update_from_file(f"{BASE_DIR}/../examples/base_expat.json")
     subdir_tus = get_subdir_tus(TARGET_DIR)
     subdir_tu  = subdir_tus[SOURCE_SUB_DIR]
     outdir = f"{BASE_DIR}/.states"

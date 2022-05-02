@@ -26,30 +26,10 @@ OUTPUT_FILES= $(OUT_LIB)
 # 'rehash' is used inside a macro
 #REPLACE_FILE=/home/jonas/Repos/euf/clang-plugins/test/onig_tests.txt
 
-#TARGET_DIR=~/Repos/oniguruma
-#INCLUDE_DIR=$(TARGET_DIR)/src
-#INPUT_FILE=~/Repos/euf/clang-plugins/test/macro.c
-#REPLACE_FILE=~/Repos/euf/tests/data/oni_rename.txt
-#EXPAND=false
-
-#TARGET_DIR=~/Repos/openssl
-#INCLUDE_DIR=$(TARGET_DIR)/include
-#INPUT_FILE=~/Repos/openssl/include/openssl/err.h
-#REPLACE_FILE=~/Repos/euf/tests/data/ssl_rename.txt
-#EXPAND=true
-
-# Look at 'redirection_ok()'
-#TARGET_DIR=~/Repos/openssl
-#INCLUDE_DIR=$(TARGET_DIR)/include
-#INPUT_FILE=~/Repos/euf/tests/data/E_http_client.c
-#REPLACE_FILE=~/Repos/euf/tests/data/ssl_rename.txt
-#GREP_TARGET=redirection_ok
-#EXPAND=false
-
 #		#define ADD_DIRECT
 TARGET_DIR=/home/jonas/.cache/euf/oniguruma-65a9b1aa
 INCLUDE_DIR=$(TARGET_DIR)/
-REPLACE_FILE=/home/jonas/Repos/euf/tests/data/oni_rename.txt
+REPLACE_FILE=/home/jonas/Repos/euf/tests/data/onig_rename.txt
 INPUT_FILE=$(TARGET_DIR)/st.c
 GREP_TARGET=rehash
 EXPAND=true
