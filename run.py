@@ -17,8 +17,7 @@ from src.util import mkdir_p, remove_files_in
 QUIET = False
 
 # - - - Usb - - -
-CONFIG.update_from_file(f"{BASE_DIR}/../examples/base_usb.json")
-
+#CONFIG.update_from_file(f"{BASE_DIR}/../examples/base_usb.json")
 #TARGET_DIR=f"{expanduser('~')}/Repos/airspy"
 #SOURCE_SUB_DIR=f"{TARGET_DIR}/build/libairspy/src"
 
@@ -26,9 +25,13 @@ TARGET_DIR=f"{expanduser('~')}/.cache/euf/libusb-4a5540a9"
 SOURCE_SUB_DIR=f"{TARGET_DIR}/libusb"
 
 # - - - Oniguruma - - -
-#CONFIG.update_from_file(f"{BASE_DIR}/../examples/base_onig.json")
-#TARGET_DIR=f"{expanduser('~')}/Repos/jq"
-#SOURCE_SUB_DIR=f"{TARGET_DIR}"
+CONFIG.update_from_file(f"{BASE_DIR}/../examples/base_onig.json")
+TARGET_DIR=f"{expanduser('~')}/Repos/jq"
+SOURCE_SUB_DIR=f"{TARGET_DIR}"
+
+SYMBOL_LIST=[
+    "onig_search"
+]
 
 # - - - Expat  - - -
 #CONFIG.update_from_file(f"{BASE_DIR}/../examples/base_expat.json")
@@ -37,20 +40,19 @@ SOURCE_SUB_DIR=f"{TARGET_DIR}/libusb"
 
 #TARGET_DIR=f"{expanduser('~')}/.cache/euf/libexpat-90ed5777/expat"
 #SOURCE_SUB_DIR=f"{TARGET_DIR}/xmlwf"
-
-SYMBOL_LIST=[
-    "XML_ExternalEntityParserCreate",
-    "siphash24",
-    "appendAttributeValue",
-    "lookup",
-    "processInternalEntity",
-    "resolveSystemId",
-    "doContent",
-    "XML_Parse",
-    "XML_ErrorString",
-    "XML_ParserCreateNS",
-    "ENTROPY_DEBUG",
-]
+#SYMBOL_LIST=[
+#    "XML_ExternalEntityParserCreate",
+#    "siphash24",
+#    "appendAttributeValue",
+#    "lookup",
+#    "processInternalEntity",
+#    "resolveSystemId",
+#    "doContent",
+#    "XML_Parse",
+#    "XML_ErrorString",
+#    "XML_ParserCreateNS",
+#    "ENTROPY_DEBUG",
+#]
 
 if __name__ == '__main__':
     CONFIG.CLANG_PLUGIN_RUN_STR_LIMIT = 10000
