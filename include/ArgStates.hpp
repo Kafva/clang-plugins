@@ -1,6 +1,6 @@
 #ifndef ArgStates_H
 #define ArgStates_H
-// The plugin receives ONE global symbol as input
+// The plugin receives ONE global symbol as input.
 // Since we only need to look at changed entities (and not all
 // symbols as with AddSuffix) the overhead of doing a new
 // run per name is not going to be notable a problem
@@ -20,11 +20,13 @@
 //  }
 //
 //  The params which are only used with finite values as arguments can
-//  be restriced during harness generation
+//  be restricted during harness generation.
 //
-//  Note that the argument names in EUF are derived from calls (not declarations)
-//  so it is integral that parameters in the output from the plugin follow the call order
-//  We therefore use a vector for the arguments rather than a map or list
+//  Note that the argument names in EUF are derived
+//  from calls (not declarations) so it is integral that parameters in
+//  the output from the plugin follow the call order.
+//  We therefore use a vector for the arguments
+//  rather than a map or list.
 //
 //  https://clang.llvm.org/docs/LibASTMatchersTutorial.html
 //
@@ -46,18 +48,18 @@ public:
   std::vector<ArgState> argumentStates;
   std::string filename;
 private:
-  void getCallPath(DynTypedNode &parent, std::string bindName, 
+  void getCallPath(DynTypedNode &parent, std::string bindName,
     std::vector<DynTypedNode> &callPath);
   void handleLiteralMatch(variants value,
     StateType matchedType, const CallExpr* call, const Expr* matchedExpr);
-  std::tuple<std::string,int> getParam(const CallExpr* matchedCall, 
-   std::vector<DynTypedNode>& callPath, 
+  std::tuple<std::string,int> getParam(const CallExpr* matchedCall,
+   std::vector<DynTypedNode>& callPath,
    const char* bindName);
 
   SourceManager* srcMgr;
   BoundNodes::IDToNodeMap nodeMap;
 
-  // Holds contxtual information about the AST, this allows
+  // Holds contextual information about the AST, this allows
   // us to determine e.g. the parents of a matched node
   ASTContext* ctx;
 };
@@ -84,13 +86,13 @@ public:
   explicit SecondPassMatcher() {}
   void run(const MatchFinder::MatchResult &) override;
   void onEndOfTranslationUnit() override {};
-  
+
   std::vector<ArgState> argumentStates;
 private:
   SourceManager* srcMgr;
   BoundNodes::IDToNodeMap nodeMap;
 
-  // Holds contxtual information about the AST, this allows
+  // Holds contextual information about the AST, this allows
   // us to determine e.g. the parents of a matched node
   ASTContext* ctx;
 };

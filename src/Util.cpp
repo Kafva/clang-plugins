@@ -1,7 +1,7 @@
 #include "Util.hpp"
 
 namespace util {
-  /// Recursivly go down the children() iterator of a stmt
+  /// Recursively go down the children() iterator of a stmt
   /// and return the leaf stmt given from always picking the first child
   const Stmt* getFirstLeaf(const Stmt* stmt, ASTContext* ctx) {
         bool hasChild = false;

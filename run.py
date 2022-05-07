@@ -29,8 +29,13 @@ CONFIG.update_from_file(f"{BASE_DIR}/../examples/base_onig.json")
 TARGET_DIR=f"{expanduser('~')}/Repos/jq"
 SOURCE_SUB_DIR=f"{TARGET_DIR}"
 
+#CONFIG.update_from_file(f"{BASE_DIR}/../tests/configs/variadic.json")
+#TARGET_DIR=f"{expanduser('~')}/.cache/euf/oniguruma-bafe"
+#SOURCE_SUB_DIR=f"{TARGET_DIR}/src"
+
 SYMBOL_LIST=[
-    "onig_search"
+    "onig_search",
+    "onig_error_code_to_str",
 ]
 
 # - - - Expat  - - -

@@ -1,6 +1,7 @@
 #include "ArgStates.hpp"
 
-static void addComma(std::ofstream &f, uint iter, uint size, bool newline=false){
+static void addComma(std::ofstream &f, uint iter, uint size, 
+  bool newline=false){
     if (iter != size) {
       f << ", ";
     }

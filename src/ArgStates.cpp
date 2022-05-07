@@ -31,7 +31,8 @@ void ArgStatesASTConsumer::HandleTranslationUnit(ASTContext &ctx) {
 
     // Copy over the function states
     // Note that the first pass only adds literals and the second adds declrefs
-    secondPass->matchHandler.argumentStates = firstPass->matchHandler.argumentStates;
+    secondPass->matchHandler.argumentStates =
+      firstPass->matchHandler.argumentStates;
     //secondPass->HandleTranslationUnit(ctx);
 
     // Overwrite the states
@@ -49,7 +50,7 @@ public:
 
     srand(time(NULL));
     DiagnosticsEngine &diagnostics = CI.getDiagnostics();
- 
+
     uint namesDiagID = diagnostics.getCustomDiagID(
       DiagnosticsEngine::Error, "missing -symbol-name"
     );
@@ -73,7 +74,7 @@ public:
   // Returns our ASTConsumer per translation unit.
   // This is essentially our entrypoint
   //  https://clang.llvm.org/docs/RAVFrontendAction.html
-  std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI, 
+  std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI,
   StringRef file) override {
     return std::make_unique<ArgStatesASTConsumer>(this->symbolName);
   }

@@ -34,7 +34,7 @@ typedef std::variant<unsigned int,uint64_t,std::string> variants;
 
 //-----------------------------------------------------------------------------
 // Argument state structures
-// We will need a seperate struct for passing values to the second pass
+// We will need a separate struct for passing values to the second pass
 //-----------------------------------------------------------------------------
 enum StateType {
   CHR, INT, STR, UNARY, NONE
